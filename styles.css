@@ -606,10 +606,10 @@ body.sidebar-open .sidebar-backdrop {
   white-space: nowrap;
 }
 .heritage-marker__dot {
-  width: 10px;
-  height: 10px;
-  border: 1px solid rgba(255,255,255,0.85);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  width: 7px;
+  height: 7px;
+  border: none;
+  box-shadow: none;
   background: var(--marker-color, #77d9b7);
   flex: 0 0 auto;
 }

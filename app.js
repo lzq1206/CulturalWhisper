@@ -835,13 +835,7 @@ function applyFilters() {
     state.clusters.set(item.id, marker);
     markerCluster.addLayer(marker);
 
-    if (item.geometry.type === 'Point') {
-      geoFeatures.push({
-        type: 'Feature',
-        geometry: item.geometry,
-        properties: { id: item.id, popupHtml: item.popupHtml },
-      });
-    } else {
+    if (item.geometry.type !== 'Point') {
       geoFeatures.push({
         type: 'Feature',
         geometry: item.geometry,
