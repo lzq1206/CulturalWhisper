@@ -544,41 +544,51 @@ code {
   background: transparent;
   border: none;
 }
-.heritage-marker__pin {
-  width: 32px;
-  height: 44px;
-  position: relative;
-  margin: 0 auto;
+.heritage-marker__wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(0);
+  white-space: nowrap;
+}
+.heritage-marker__dot {
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(255,255,255,0.85);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
   background: var(--marker-color, #77d9b7);
-  border: 2px solid rgba(255,255,255,0.75);
-  border-radius: 20px 20px 20px 2px;
-  transform: rotate(-45deg);
-  box-shadow: 0 12px 26px rgba(0,0,0,0.35);
+  flex: 0 0 auto;
 }
-.heritage-marker__pin::after {
-  content: '';
-  position: absolute;
-  inset: 8px;
+.heritage-marker__dot--circle {
   border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.35);
 }
-.heritage-marker__core {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
+.heritage-marker__dot--square {
+  border-radius: 2px;
+}
+.heritage-marker__dot--diamond {
   transform: rotate(45deg);
-  color: white;
-  font-size: 14px;
-  font-weight: 900;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  border-radius: 2px;
 }
-.heritage-marker__hint {
-  margin-top: 3px;
-  text-align: center;
-  font-size: 10px;
-  color: #d9e6f2;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+.heritage-marker__dot--triangle {
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  border-radius: 0;
+}
+.heritage-marker__dot--hexagon {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  border-radius: 0;
+}
+.heritage-marker__label {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ecf8ff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(4,10,20,0.72);
+  border: 1px solid rgba(255,255,255,0.1);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
 }
 
 .leaflet-container {

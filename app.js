@@ -46,6 +46,7 @@ const geoLayer = L.geoJSON(null, {
 
 map.addLayer(markerCluster);
 map.addLayer(geoLayer);
+map.on('zoomend', refreshMarkerIcons);
 
 const state = {
   items: [],
@@ -170,21 +171,46 @@ function categoryHint(category) {
   return map[key] || key || '未分类';
 }
 
-function createMarkerIcon(item) {
+function categoryShape(category) {
+  const key = safeText(category);
+  const map = {
+    '古遗址': 'circle',
+    '古建筑': 'square',
+    '古墓葬': 'diamond',
+    '石窟寺及石刻': 'triangle',
+    '近现代重要史迹及代表性建筑': 'hexagon',
+    '其他': 'circle',
+  };
+  return map[key] || 'circle';
+}
+
+function shouldShowLabels() {
+  return map.getZoom() >= 10;
+}
+
+function createMarkerIcon(item, showLabel = shouldShowLabels()) {
   const color = state.batchColors.get(item.batch) || '#77d9b7';
-  const glyph = categoryGlyph(item.category);
-  const hint = categoryHint(item.category);
+  const shape = categoryShape(item.category);
+  const label = showLabel ? escapeHtml(item.name) : '';
   return L.divIcon({
     className: 'heritage-marker',
     html: `
-      <div class="heritage-marker__pin" style="--marker-color:${color}">
-        <div class="heritage-marker__core">${escapeHtml(glyph)}</div>
+      <div class="heritage-marker__wrap heritage-marker__wrap--${shape}" style="--marker-color:${color}">
+        <span class="heritage-marker__dot heritage-marker__dot--${shape}"></span>
+        ${showLabel ? `<span class="heritage-marker__label">${label}</span>` : ''}
       </div>
-      <div class="heritage-marker__hint">${escapeHtml(hint)}</div>
     `,
-    iconSize: [44, 58],
-    iconAnchor: [22, 50],
-    popupAnchor: [0, -44],
+    iconSize: showLabel ? [170, 22] : [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -10],
+  });
+}
+
+function refreshMarkerIcons() {
+  const showLabel = shouldShowLabels();
+  state.clusters.forEach((marker, id) => {
+    const item = state.lookup.get(id);
+    if (item && marker.setIcon) marker.setIcon(createMarkerIcon(item, showLabel));
   });
 }
 
@@ -807,6 +833,7 @@ function applyFilters() {
   renderList();
   buildBatchBars();
   updateStats();
+  refreshMarkerIcons();
 
   if (state.filtered.length) {
     const bounds = L.latLngBounds(state.filtered.map((item) => item.center).filter(Boolean));
