@@ -61,6 +61,7 @@ const els = {
   batchFilter: document.getElementById('batchFilter'),
   provinceFilter: document.getElementById('provinceFilter'),
   typeFilter: document.getElementById('typeFilter'),
+  eraFilter: document.getElementById('eraFilter'),
   fileInput: document.getElementById('fileInput'),
   resetViewBtn: document.getElementById('resetViewBtn'),
   mapHint: document.getElementById('mapHint'),
@@ -139,6 +140,7 @@ function pickField(dict, candidates) {
   const lower = {};
   Object.entries(dict).forEach(([k, v]) => {
     lower[k.toLowerCase()] = v;
+    lower[k.toLowerCase().replace(/\s+/g, '')] = v;
   });
   for (const candidate of candidates) {
     const key = candidate.toLowerCase();
@@ -199,13 +201,15 @@ function geometryToGeoJSON(geometryNode) {
 
 function createPopupHtml(item) {
   return `
-    <div style="min-width:240px;max-width:320px">
+    <div style="min-width:260px;max-width:340px">
       <div style="font-size:16px;font-weight:800;margin-bottom:8px">${escapeHtml(item.name)}</div>
       <div style="font-size:12px;color:#9fb3c9;line-height:1.7">
         <div><strong>批次：</strong>${escapeHtml(item.batch || '未识别')}</div>
-        <div><strong>类型：</strong>${escapeHtml(item.type || '未识别')}</div>
+        <div><strong>类别：</strong>${escapeHtml(item.type || '未识别')}</div>
+        <div><strong>时代：</strong>${escapeHtml(item.era || '未识别')}</div>
         <div><strong>省份/地区：</strong>${escapeHtml(item.province || '未识别')}</div>
         <div><strong>城市：</strong>${escapeHtml(item.city || '未识别')}</div>
+        <div><strong>编号：</strong>${escapeHtml(item.code || '未识别')}</div>
       </div>
     </div>
   `;
@@ -221,13 +225,32 @@ function summarizeDescription(item) {
 
 function parsePlacemark(placemark, index) {
   const { raw, dict } = parseExtendedData(placemark);
-  const name = safeText(parseXmlText(placemark, 'name')) || pickField(dict, ['name', '名称', 'title', '项目名称']) || `未命名点位 ${index + 1}`;
-  const description = decodeHtmlEntities(parseXmlText(placemark, 'description')) || pickField(dict, ['description', '简介', '说明', '备注', '概述']);
-  const batch = pickField(dict, ['批次', 'batch', 'year', '年份', '公布年份', '入选批次']);
-  const type = pickField(dict, ['类型', 'type', 'category', '类别', '文物类型']);
-  const province = pickField(dict, ['省份', 'province', '省', '行政区', '所在地', '行政区划']);
-  const city = pickField(dict, ['城市', 'city', '市', '地区', '县市']);
-  const era = pickField(dict, ['年代', '时代', '朝代', '时期']);
+  const name =
+    pickField(dict, ['NameCN', 'namecn', 'Name', 'name', '名称', '项目名称', 'title']) ||
+    safeText(parseXmlText(placemark, 'name')) ||
+    `未命名点位 ${index + 1}`;
+
+  const nameEn = pickField(dict, ['NameEN', 'nameen', '英文名称']);
+  const description =
+    decodeHtmlEntities(parseXmlText(placemark, 'description')) ||
+    pickField(dict, ['DescCN', 'desc', 'description', '简介', '说明', '备注', '概述']);
+  const batch = pickField(dict, ['PackCN', 'packcn', '批次', 'batch', 'year', '年份', '公布年份', '入选批次']);
+  const batchEn = pickField(dict, ['PackEN', 'packen']);
+  const category = pickField(dict, ['TCN', 'tcn', '类别', 'type', 'category', '文物类型']);
+  const categoryEn = pickField(dict, ['TEN', 'ten']);
+  const era = pickField(dict, ['PCN', 'pcn', '时代', '年代', '朝代', '时期']);
+  const eraEn = pickField(dict, ['PEN', 'pen']);
+  const province = pickField(dict, ['PADCN', 'padcn', '省份', 'province', '省', '行政区', '所在地', '行政区划']);
+  const provinceEn = pickField(dict, ['PADEN', 'paden']);
+  const city = pickField(dict, ['MADCN', 'madcn', '城市', 'city', '市', '地区', '县市', '地级市']);
+  const cityEn = pickField(dict, ['MADEN', 'maden']);
+  const county = pickField(dict, ['CADCN', 'cadcn', '区县', 'county', '县', '辖区']);
+  const countyEn = pickField(dict, ['CADEN', 'caden']);
+  const code = pickField(dict, ['Cnum', 'cnum', '编号', '文物编号', '序号']);
+  const num = pickField(dict, ['Num', 'num']);
+  const lat = pickField(dict, ['LAT84', 'lat84', 'lat', 'latitude']);
+  const lon = pickField(dict, ['LON84', 'lon84', 'lon', 'longitude']);
+  const cite = pickField(dict, ['CiteCN', 'citecn', '引用']);
 
   const geometries = [];
   placemark.childNodes.forEach((node) => {
@@ -247,13 +270,20 @@ function parsePlacemark(placemark, index) {
   });
 
   let geometry = geometries[0] || null;
+  if (!geometry && lat && lon) {
+    const latNum = Number(lat);
+    const lonNum = Number(lon);
+    if (Number.isFinite(latNum) && Number.isFinite(lonNum)) {
+      geometry = { type: 'Point', coordinates: [lonNum, latNum] };
+    }
+  }
   if (!geometry) {
     const coords = pickField(dict, ['coordinates', '坐标']);
     if (coords) {
       const first = coords.trim().split(/\s+/)[0];
-      const [lng, lat] = first.split(',').map(Number);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        geometry = { type: 'Point', coordinates: [lng, lat] };
+      const [lng, lat2] = first.split(',').map(Number);
+      if (Number.isFinite(lat2) && Number.isFinite(lng)) {
+        geometry = { type: 'Point', coordinates: [lng, lat2] };
       }
     }
   }
@@ -272,28 +302,53 @@ function parsePlacemark(placemark, index) {
   }
 
   const item = {
-    id: `${index}-${name}`,
+    id: `${index}-${code || name}`,
     index,
     name,
+    nameEn,
     description,
     batch,
-    type,
-    province,
-    city,
+    batchEn,
+    category,
+    type: category,
+    categoryEn,
     era,
+    eraEn,
+    province,
+    provinceEn,
+    city,
+    cityEn,
+    county,
+    countyEn,
+    code,
+    num,
+    lat,
+    lon,
+    cite,
     raw,
     geometry,
     center,
-    popupHtml: createPopupHtml({ name, batch, type, province, city }),
+    popupHtml: createPopupHtml({ name, batch, type: category, province, city, era, code }),
   };
 
   item.searchBlob = normalizeKey([
     item.name,
+    item.nameEn,
     item.batch,
+    item.batchEn,
+    item.category,
     item.type,
-    item.province,
-    item.city,
+    item.categoryEn,
     item.era,
+    item.eraEn,
+    item.province,
+    item.provinceEn,
+    item.city,
+    item.cityEn,
+    item.county,
+    item.countyEn,
+    item.code,
+    item.num,
     item.description,
     JSON.stringify(item.raw),
   ].join(' '));
@@ -399,12 +454,14 @@ function updateStats() {
   const filtered = state.filtered;
   const batches = new Set(items.map((item) => item.batch).filter(Boolean));
   const provinces = new Set(items.map((item) => item.province).filter(Boolean));
+  const categories = new Set(items.map((item) => item.category).filter(Boolean));
 
   els.statCount.textContent = String(items.length);
   els.statBatches.textContent = String(batches.size);
   els.statProvinces.textContent = String(provinces.size);
   els.statFiltered.textContent = String(filtered.length);
   els.resultCount.textContent = String(filtered.length);
+  els.mapHint.dataset.categoryCount = String(categories.size);
 }
 
 function optionsForField(items, field) {
@@ -414,7 +471,8 @@ function optionsForField(items, field) {
 function fillFilterOptions() {
   const batchOptions = optionsForField(state.items, 'batch');
   const provinceOptions = optionsForField(state.items, 'province');
-  const typeOptions = optionsForField(state.items, 'type');
+  const typeOptions = optionsForField(state.items, 'category');
+  const eraOptions = optionsForField(state.items, 'era');
 
   const fill = (select, options) => {
     const current = select.value || 'all';
@@ -426,6 +484,7 @@ function fillFilterOptions() {
   fill(els.batchFilter, batchOptions);
   fill(els.provinceFilter, provinceOptions);
   fill(els.typeFilter, typeOptions);
+  fill(els.eraFilter, eraOptions);
 }
 
 function buildBatchBars() {
@@ -464,8 +523,9 @@ function renderList() {
     node.innerHTML = `
       <div class="list-item__title">${escapeHtml(item.name)}</div>
       <div class="list-item__meta">
-        ${item.batch ? `<span class="pill">批次 ${escapeHtml(item.batch)}</span>` : ''}
-        ${item.type ? `<span class="pill">${escapeHtml(item.type)}</span>` : ''}
+        ${item.batch ? `<span class="pill">${escapeHtml(item.batch)}</span>` : ''}
+        ${item.category ? `<span class="pill pill--accent">${escapeHtml(item.category)}</span>` : ''}
+        ${item.era ? `<span class="pill pill--soft">${escapeHtml(item.era)}</span>` : ''}
         ${item.province ? `<span class="pill">${escapeHtml(item.province)}</span>` : ''}
         ${item.city ? `<span class="pill">${escapeHtml(item.city)}</span>` : ''}
       </div>
@@ -486,12 +546,16 @@ function renderDetail(item) {
   els.detailCard.innerHTML = `
     <div class="detail__title">${escapeHtml(item.name)}</div>
     <div class="detail__meta">
-      <div><strong>批次：</strong>${escapeHtml(item.batch || '未识别')}</div>
-      <div><strong>类型：</strong>${escapeHtml(item.type || '未识别')}</div>
-      <div><strong>省份/地区：</strong>${escapeHtml(item.province || '未识别')}</div>
-      <div><strong>城市：</strong>${escapeHtml(item.city || '未识别')}</div>
-      <div><strong>年代：</strong>${escapeHtml(item.era || '未识别')}</div>
+      <div><strong>英文名称：</strong>${escapeHtml(item.nameEn || '未识别')}</div>
+      <div><strong>批次：</strong>${escapeHtml(item.batch || '未识别')} ${item.batchEn ? `(${escapeHtml(item.batchEn)})` : ''}</div>
+      <div><strong>类别：</strong>${escapeHtml(item.type || '未识别')} ${item.categoryEn ? `(${escapeHtml(item.categoryEn)})` : ''}</div>
+      <div><strong>时代：</strong>${escapeHtml(item.era || '未识别')} ${item.eraEn ? `(${escapeHtml(item.eraEn)})` : ''}</div>
+      <div><strong>省份/地区：</strong>${escapeHtml(item.province || '未识别')} ${item.provinceEn ? `(${escapeHtml(item.provinceEn)})` : ''}</div>
+      <div><strong>城市：</strong>${escapeHtml(item.city || '未识别')} ${item.cityEn ? `(${escapeHtml(item.cityEn)})` : ''}</div>
+      <div><strong>区县：</strong>${escapeHtml(item.county || '未识别')} ${item.countyEn ? `(${escapeHtml(item.countyEn)})` : ''}</div>
+      <div><strong>编号：</strong>${escapeHtml(item.code || '未识别')} ${item.num ? `#${escapeHtml(item.num)}` : ''}</div>
       <div><strong>坐标：</strong>${escapeHtml(coords)}</div>
+      ${item.cite ? `<div><strong>引用：</strong>${escapeHtml(item.cite)}</div>` : ''}
     </div>
     <div class="detail__desc">${escapeHtml(summarizeDescription(item))}</div>
   `;
@@ -522,14 +586,23 @@ function applyFilters() {
   const batch = els.batchFilter.value;
   const province = els.provinceFilter.value;
   const type = els.typeFilter.value;
+  const era = els.eraFilter.value;
 
   state.filtered = state.items.filter((item) => {
     if (batch !== 'all' && item.batch !== batch) return false;
     if (province !== 'all' && item.province !== province) return false;
-    if (type !== 'all' && item.type !== type) return false;
+    if (type !== 'all' && item.category !== type) return false;
+    if (era !== 'all' && item.era !== era) return false;
     if (query && !item.searchBlob.includes(query)) return false;
     return true;
   });
+
+  const colorForBatch = (batchLabel) => {
+    const palette = ['#77d9b7', '#76c7ff', '#b794f4', '#f6c177', '#ff8fab', '#8dd0ff', '#95d56d', '#f59e0b'];
+    if (!batchLabel) return palette[0];
+    const n = Array.from(batchLabel).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    return palette[n % palette.length];
+  };
 
   clearLayers();
   state.clusters.clear();
@@ -537,11 +610,12 @@ function applyFilters() {
   state.filtered.forEach((item) => {
     if (!item.center || !item.geometry) return;
     const latlng = item.center;
+    const accent = colorForBatch(item.batch);
     const marker = L.circleMarker(latlng, {
       radius: 5,
       weight: 1.2,
       color: '#dafdf0',
-      fillColor: '#77d9b7',
+      fillColor: accent,
       fillOpacity: 0.95,
     });
     marker.bindPopup(item.popupHtml, { closeButton: true, maxWidth: 340 });
@@ -636,6 +710,7 @@ els.searchInput.addEventListener('input', applyFilters);
 els.batchFilter.addEventListener('change', applyFilters);
 els.provinceFilter.addEventListener('change', applyFilters);
 els.typeFilter.addEventListener('change', applyFilters);
+els.eraFilter.addEventListener('change', applyFilters);
 els.fileInput.addEventListener('change', async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -650,6 +725,7 @@ els.resetViewBtn.addEventListener('click', () => {
   els.batchFilter.value = 'all';
   els.provinceFilter.value = 'all';
   els.typeFilter.value = 'all';
+  els.eraFilter.value = 'all';
   applyFilters();
   map.setView([35.8617, 104.1954], 4);
 });

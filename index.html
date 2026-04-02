@@ -54,11 +54,12 @@
 
           <aside class="hero__panel">
             <div class="panel-card panel-card--accent">
-              <div class="panel-card__title">使用说明</div>
+              <div class="panel-card__title">字段说明</div>
               <ol class="panel-list">
-                <li>把 KML 放到 <code>data/</code> 目录。</li>
-                <li>或者直接拖拽文件到页面。</li>
-                <li>输入名称、批次、省份快速定位。</li>
+                <li><code>PackCN</code>：第几批。</li>
+                <li><code>TCN</code>：文保类别。</li>
+                <li><code>PCN</code>：所属时代。</li>
+                <li><code>PADCN / MADCN / CADCN</code>：省、市、区县。</li>
               </ol>
             </div>
             <div class="panel-card">
@@ -77,20 +78,26 @@
 
         <div class="toolbar__selects">
           <label>
-            <span>批次</span>
+            <span>批次（PackCN）</span>
             <select id="batchFilter">
               <option value="all">全部</option>
             </select>
           </label>
           <label>
-            <span>省份/地区</span>
-            <select id="provinceFilter">
+            <span>类别（TCN）</span>
+            <select id="typeFilter">
               <option value="all">全部</option>
             </select>
           </label>
           <label>
-            <span>类型</span>
-            <select id="typeFilter">
+            <span>时代（PCN）</span>
+            <select id="eraFilter">
+              <option value="all">全部</option>
+            </select>
+          </label>
+          <label>
+            <span>省份/地区（PADCN）</span>
+            <select id="provinceFilter">
               <option value="all">全部</option>
             </select>
           </label>

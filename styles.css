@@ -202,7 +202,7 @@ code {
 }
 .toolbar__selects {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 .toolbar__actions {
@@ -371,6 +371,14 @@ code {
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.04);
   color: #dbe8f2;
+}
+.pill--accent {
+  background: rgba(119, 217, 183, 0.12);
+  border-color: rgba(119, 217, 183, 0.18);
+}
+.pill--soft {
+  background: rgba(118, 199, 255, 0.1);
+  border-color: rgba(118, 199, 255, 0.16);
 }
 .detail {
   min-height: 180px;
