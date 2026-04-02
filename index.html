@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="CulturalWhisper：全国重点文物保护单位地图展示，支持 KML 导入、检索、筛选与分布统计。" />
+    <title>CulturalWhisper | 全国重点文物保护单位地图</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow bg-glow-a"></div>
+    <div class="bg-glow bg-glow-b"></div>
+
+    <main class="shell">
+      <header class="hero card">
+        <div class="hero__topline">
+          <span class="badge">CulturalWhisper</span>
+          <span class="badge badge--soft">全国重点文物保护单位空间展示</span>
+          <span class="badge badge--soft">KML / GeoJSON / 直接上传</span>
+        </div>
+
+        <div class="hero__grid">
+          <section>
+            <p class="eyebrow">China Heritage Map</p>
+            <h1>把全国重点文物保护单位放到一张可检索的地图上</h1>
+            <p class="hero__lead">
+              本页会优先加载 <code>./data/CulRelPro_China_1961-2019.kml</code>。
+              如果本地文件尚未放入，也可以直接拖拽 KML/GeoJSON 文件导入，立即生成可交互网页。
+            </p>
+
+            <div class="hero__stats" id="heroStats">
+              <div class="stat">
+                <div class="stat__label">点位</div>
+                <div class="stat__value" id="statCount">0</div>
+              </div>
+              <div class="stat">
+                <div class="stat__label">批次</div>
+                <div class="stat__value" id="statBatches">0</div>
+              </div>
+              <div class="stat">
+                <div class="stat__label">省份/地区</div>
+                <div class="stat__value" id="statProvinces">0</div>
+              </div>
+              <div class="stat">
+                <div class="stat__label">当前筛选</div>
+                <div class="stat__value" id="statFiltered">0</div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="hero__panel">
+            <div class="panel-card panel-card--accent">
+              <div class="panel-card__title">使用说明</div>
+              <ol class="panel-list">
+                <li>把 KML 放到 <code>data/</code> 目录。</li>
+                <li>或者直接拖拽文件到页面。</li>
+                <li>输入名称、批次、省份快速定位。</li>
+              </ol>
+            </div>
+            <div class="panel-card">
+              <div class="panel-card__title">地图风格</div>
+              <p class="panel-text">采用深色底图 + 玉石绿强调，适合做文化遗产展示页和 GitHub Pages 静态站点。</p>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <section class="toolbar card">
+        <div class="toolbar__search">
+          <label for="searchInput">搜索</label>
+          <input id="searchInput" type="search" placeholder="输入名称、地点、批次、类型关键词" />
+        </div>
+
+        <div class="toolbar__selects">
+          <label>
+            <span>批次</span>
+            <select id="batchFilter">
+              <option value="all">全部</option>
+            </select>
+          </label>
+          <label>
+            <span>省份/地区</span>
+            <select id="provinceFilter">
+              <option value="all">全部</option>
+            </select>
+          </label>
+          <label>
+            <span>类型</span>
+            <select id="typeFilter">
+              <option value="all">全部</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="toolbar__actions">
+          <button id="resetViewBtn" class="btn btn--ghost" type="button">重置视图</button>
+          <label class="btn btn--primary file-btn">
+            导入文件
+            <input id="fileInput" type="file" accept=".kml,.kmz,.geojson,.json,.xml" hidden />
+          </label>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <div class="map-wrap card">
+          <div id="map"></div>
+          <div class="map-hint" id="mapHint">正在尝试加载本地数据…</div>
+        </div>
+
+        <aside class="side card">
+          <div class="side__header">
+            <div>
+              <p class="eyebrow">列表</p>
+              <h2>检索结果</h2>
+            </div>
+            <div class="side__count" id="resultCount">0</div>
+          </div>
+
+          <div class="distribution">
+            <div class="distribution__title">批次分布</div>
+            <div id="batchBars" class="bars"></div>
+          </div>
+
+          <div class="list" id="resultList"></div>
+
+          <div class="detail" id="detailCard">
+            <div class="detail__empty">点击左侧结果或地图点位查看详情</div>
+          </div>
+        </aside>
+      </section>
+
+      <footer class="footer card">
+        <div>
+          <strong>数据口径</strong>
+          <p>页面结构已就绪，字段会自动从 KML 的 ExtendedData 中识别：名称、批次、类型、省份、城市、年代、简介等。</p>
+        </div>
+        <div>
+          <strong>项目目录</strong>
+          <p><code>./data/CulRelPro_China_1961-2019.kml</code> 建议与网页同仓库部署，便于 GitHub Pages 直接访问。</p>
+        </div>
+      </footer>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
