@@ -69,6 +69,9 @@ const els = {
   categoryAllBtn: document.getElementById('categoryAllBtn'),
   categoryNoneBtn: document.getElementById('categoryNoneBtn'),
   batchLegend: document.getElementById('batchLegend'),
+  sidebarToggle: document.getElementById('sidebarToggle'),
+  sidebarBackdrop: document.getElementById('sidebarBackdrop'),
+  sidebar: document.getElementById('sidebar'),
   fileInput: document.getElementById('fileInput'),
   resetViewBtn: document.getElementById('resetViewBtn'),
   mapHint: document.getElementById('mapHint'),
@@ -88,6 +91,24 @@ function updateClusterProgress(processed, total, elapsed) {
   if (processed >= total) {
     els.mapHint.textContent = `已完成绘制，共 ${state.items.length} 个点位。`;
   }
+}
+
+function mountSidebar() {
+  if (!els.sidebar) return;
+  const targets = [
+    document.querySelector('header.hero'),
+    document.querySelector('section.toolbar'),
+    document.querySelector('aside.side'),
+    document.querySelector('footer.footer'),
+  ].filter(Boolean);
+  targets.forEach((node) => {
+    if (node.parentElement !== els.sidebar) els.sidebar.appendChild(node);
+  });
+}
+
+function setSidebarOpen(open) {
+  document.body.classList.toggle('sidebar-open', open);
+  window.setTimeout(() => map.invalidateSize(), 240);
 }
 
 function safeText(value) {
@@ -902,11 +923,15 @@ async function handleFile(file) {
   await ingestItems(items, `已从 ${file.name} 导入 ${items.length} 条记录。`);
 }
 
+mountSidebar();
+
 els.searchInput.addEventListener('input', applyFilters);
 els.batchFilter.addEventListener('change', applyFilters);
 els.provinceFilter.addEventListener('change', applyFilters);
 els.typeFilter.addEventListener('change', applyFilters);
 els.eraFilter.addEventListener('change', applyFilters);
+els.sidebarToggle.addEventListener('click', () => setSidebarOpen(!document.body.classList.contains('sidebar-open')));
+els.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
 els.categoryAllBtn.addEventListener('click', () => {
   state.activeCategories = new Set(Array.from(new Set(state.items.map((item) => item.category).filter(Boolean))));
   renderCategoryToggles();
@@ -936,6 +961,10 @@ els.resetViewBtn.addEventListener('click', () => {
   renderCategoryToggles();
   applyFilters();
   map.setView([35.8617, 104.1954], 4);
+});
+
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') setSidebarOpen(false);
 });
 
 window.addEventListener('dragover', (event) => {
