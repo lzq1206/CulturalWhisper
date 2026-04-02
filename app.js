@@ -52,6 +52,7 @@ const state = {
   filtered: [],
   lookup: new Map(),
   clusters: new Map(),
+  batchColors: new Map(),
   bounds: null,
   selectedId: null,
 };
@@ -85,6 +86,101 @@ function updateClusterProgress(processed, total, elapsed) {
 
 function safeText(value) {
   return value == null ? '' : String(value).trim();
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function hexToRgb(hex) {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((x) => x + x).join('') : clean;
+  const n = parseInt(full, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbToHex({ r, g, b }) {
+  return '#' + [r, g, b].map((x) => clamp(Math.round(x), 0, 255).toString(16).padStart(2, '0')).join('');
+}
+
+function mixHex(left, right, t) {
+  const a = hexToRgb(left);
+  const b = hexToRgb(right);
+  return rgbToHex({ r: lerp(a.r, b.r, t), g: lerp(a.g, b.g, t), b: lerp(a.b, b.b, t) });
+}
+
+function batchRank(label) {
+  const text = safeText(label);
+  const arabic = text.match(/(\d+)/);
+  if (arabic) return Number(arabic[1]);
+  const chinese = {
+    '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8,
+    '九': 9, '十': 10,
+  };
+  const hit = text.match(/第?([一二三四五六七八九十]+)批/);
+  if (!hit) return Number.POSITIVE_INFINITY;
+  const chars = hit[1];
+  if (chars.length === 1) return chinese[chars] ?? Number.POSITIVE_INFINITY;
+  if (chars === '十') return 10;
+  if (chars.length === 2 && chars.startsWith('十')) return 10 + (chinese[chars[1]] || 0);
+  if (chars.length === 2 && chars.endsWith('十')) return (chinese[chars[0]] || 0) * 10;
+  return chinese[chars] ?? Number.POSITIVE_INFINITY;
+}
+
+function batchColorFromRank(rank, total) {
+  const start = '#ff4d4f';
+  const end = '#3b82f6';
+  if (!Number.isFinite(rank) || !Number.isFinite(total) || total <= 1) return mixHex(start, end, 0.45);
+  const t = clamp((rank - 1) / Math.max(1, total - 1), 0, 1);
+  return mixHex(start, end, t);
+}
+
+function categoryGlyph(category) {
+  const key = safeText(category);
+  const map = {
+    '古遗址': '址',
+    '古建筑': '建',
+    '古墓葬': '墓',
+    '石窟寺及石刻': '石',
+    '近现代重要史迹及代表性建筑': '今',
+    '其他': '其',
+  };
+  return map[key] || key.slice(0, 1) || '•';
+}
+
+function categoryHint(category) {
+  const key = safeText(category);
+  const map = {
+    '古遗址': '遗址',
+    '古建筑': '建筑',
+    '古墓葬': '墓葬',
+    '石窟寺及石刻': '石窟/石刻',
+    '近现代重要史迹及代表性建筑': '近现代',
+    '其他': '其他',
+  };
+  return map[key] || key || '未分类';
+}
+
+function createMarkerIcon(item) {
+  const color = state.batchColors.get(item.batch) || '#77d9b7';
+  const glyph = categoryGlyph(item.category);
+  const hint = categoryHint(item.category);
+  return L.divIcon({
+    className: 'heritage-marker',
+    html: `
+      <div class="heritage-marker__pin" style="--marker-color:${color}">
+        <div class="heritage-marker__core">${escapeHtml(glyph)}</div>
+      </div>
+      <div class="heritage-marker__hint">${escapeHtml(hint)}</div>
+    `,
+    iconSize: [44, 58],
+    iconAnchor: [22, 50],
+    popupAnchor: [0, -44],
+  });
 }
 
 function escapeHtml(text) {
@@ -445,6 +541,13 @@ function buildLookup(items) {
   items.forEach((item) => state.lookup.set(item.id, item));
 }
 
+function buildBatchColors(items) {
+  const labels = Array.from(new Set(items.map((item) => item.batch).filter(Boolean)));
+  const sorted = labels.sort((a, b) => batchRank(a) - batchRank(b) || a.localeCompare(b, 'zh-Hans-CN'));
+  const total = sorted.length;
+  state.batchColors = new Map(sorted.map((label, index) => [label, batchColorFromRank(index + 1, total)]));
+}
+
 function setStatus(message) {
   els.mapHint.textContent = message;
 }
@@ -469,7 +572,7 @@ function optionsForField(items, field) {
 }
 
 function fillFilterOptions() {
-  const batchOptions = optionsForField(state.items, 'batch');
+  const batchOptions = optionsForField(state.items, 'batch').sort((a, b) => batchRank(a) - batchRank(b) || a.localeCompare(b, 'zh-Hans-CN'));
   const provinceOptions = optionsForField(state.items, 'province');
   const typeOptions = optionsForField(state.items, 'category');
   const eraOptions = optionsForField(state.items, 'era');
@@ -597,26 +700,15 @@ function applyFilters() {
     return true;
   });
 
-  const colorForBatch = (batchLabel) => {
-    const palette = ['#77d9b7', '#76c7ff', '#b794f4', '#f6c177', '#ff8fab', '#8dd0ff', '#95d56d', '#f59e0b'];
-    if (!batchLabel) return palette[0];
-    const n = Array.from(batchLabel).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    return palette[n % palette.length];
-  };
-
   clearLayers();
   state.clusters.clear();
   const geoFeatures = [];
   state.filtered.forEach((item) => {
     if (!item.center || !item.geometry) return;
     const latlng = item.center;
-    const accent = colorForBatch(item.batch);
-    const marker = L.circleMarker(latlng, {
-      radius: 5,
-      weight: 1.2,
-      color: '#dafdf0',
-      fillColor: accent,
-      fillOpacity: 0.95,
+    const marker = L.marker(latlng, {
+      icon: createMarkerIcon(item),
+      riseOnHover: true,
     });
     marker.bindPopup(item.popupHtml, { closeButton: true, maxWidth: 340 });
     marker.on('click', () => selectRecord(item.id));
@@ -686,6 +778,7 @@ async function tryAutoLoad() {
 async function ingestItems(items, message) {
   state.items = items;
   buildLookup(state.items);
+  buildBatchColors(state.items);
   fillFilterOptions();
   state.filtered = [...state.items];
   updateStats();
