@@ -13,21 +13,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; OpenStreetMap &copy; CARTO',
 }).addTo(map);
 
-const markerCluster = L.markerClusterGroup({
-  showCoverageOnHover: false,
-  spiderfyOnMaxZoom: true,
-  chunkedLoading: true,
-  chunkProgress: updateClusterProgress,
-  iconCreateFunction(cluster) {
-    const count = cluster.getChildCount();
-    const size = Math.min(34, 16 + Math.sqrt(count) * 2.5);
-    return L.divIcon({
-      html: `<span class="heritage-cluster__dot" style="width:${size}px;height:${size}px"></span>`,
-      className: 'heritage-cluster',
-      iconSize: L.point(size, size),
-    });
-  },
-});
+const markerCluster = L.layerGroup();
 
 const geoLayer = L.geoJSON(null, {
   style: {
