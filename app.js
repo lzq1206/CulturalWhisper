@@ -317,8 +317,6 @@ function renderVisibleMarkers() {
 
   geoLayer.addData({ type: 'FeatureCollection', features: geoFeatures });
   state.visibleCount = visibleCount;
-  const selectedMarker = state.selectedId ? state.clusters.get(state.selectedId) : null;
-  if (selectedMarker && selectedMarker.openPopup) selectedMarker.openPopup();
 }
 
 function escapeHtml(text) {
@@ -913,15 +911,16 @@ function applyFilters() {
   updateStats();
   scheduleVisibleRender();
 
-  if (state.filtered.length) {
-    const bounds = L.latLngBounds(state.filtered.map((item) => item.center).filter(Boolean));
-    if (bounds.isValid()) map.fitBounds(bounds.pad(0.1), { animate: true });
-    const first = state.filtered[0];
-    renderDetail(first);
-    state.selectedId = first.id;
+  if (state.selectedId) {
+    const selected = state.lookup.get(state.selectedId);
+    if (selected && state.filtered.some((item) => item.id === selected.id)) {
+      renderDetail(selected);
+    } else {
+      state.selectedId = null;
+      renderDetail(null);
+    }
   } else {
     renderDetail(null);
-    state.selectedId = null;
   }
 }
 
