@@ -53,6 +53,7 @@ const state = {
   lookup: new Map(),
   clusters: new Map(),
   batchColors: new Map(),
+  activeCategories: new Set(),
   bounds: null,
   selectedId: null,
 };
@@ -63,6 +64,10 @@ const els = {
   provinceFilter: document.getElementById('provinceFilter'),
   typeFilter: document.getElementById('typeFilter'),
   eraFilter: document.getElementById('eraFilter'),
+  categoryToggles: document.getElementById('categoryToggles'),
+  categoryAllBtn: document.getElementById('categoryAllBtn'),
+  categoryNoneBtn: document.getElementById('categoryNoneBtn'),
+  batchLegend: document.getElementById('batchLegend'),
   fileInput: document.getElementById('fileInput'),
   resetViewBtn: document.getElementById('resetViewBtn'),
   mapHint: document.getElementById('mapHint'),
@@ -479,16 +484,18 @@ function loadFromGeoJSON(json) {
     } else if (geometry?.coordinates) {
       center = computeCenterFromGeometry(geometry);
     }
+    const category = props.category || props.type || props.类型 || props.TCN || props.tcn || '';
     const item = {
       id: props.id || `${index}-${props.name || 'feature'}`,
       index,
       name: props.name || props.title || props.名称 || `未命名点位 ${index + 1}`,
       description: props.description || props.desc || props.简介 || '',
-      batch: props.batch || props.批次 || props.year || props.年份 || '',
-      type: props.type || props.类型 || props.category || '',
-      province: props.province || props.省份 || props.省 || '',
-      city: props.city || props.城市 || props.市 || '',
-      era: props.era || props.年代 || props.朝代 || '',
+      batch: props.batch || props.批次 || props.PackCN || props.packcn || props.year || props.年份 || '',
+      category,
+      type: category,
+      province: props.province || props.省份 || props.PADCN || props.省 || '',
+      city: props.city || props.城市 || props.MADCN || props.市 || '',
+      era: props.era || props.年代 || props.PCN || props.朝代 || '',
       raw: props,
       geometry,
       center,
@@ -548,6 +555,65 @@ function buildBatchColors(items) {
   state.batchColors = new Map(sorted.map((label, index) => [label, batchColorFromRank(index + 1, total)]));
 }
 
+function buildCategoryState(items) {
+  const categories = Array.from(new Set(items.map((item) => safeText(item.category)).filter(Boolean)));
+  state.activeCategories = new Set(categories);
+  return categories;
+}
+
+function renderCategoryToggles() {
+  const categories = Array.from(new Set(state.items.map((item) => safeText(item.category)).filter(Boolean)));
+  const counts = new Map();
+  state.items.forEach((item) => {
+    const key = item.category || '未分类';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  els.categoryToggles.innerHTML = categories.length
+    ? categories.map((category) => {
+        const checked = state.activeCategories.has(category) ? 'checked' : '';
+        return `
+          <label class="toggle-item">
+            <input type="checkbox" data-category="${escapeHtml(category)}" ${checked} />
+            <span class="toggle-item__label">${escapeHtml(category)}</span>
+            <span class="toggle-item__count">${counts.get(category) || 0}</span>
+          </label>
+        `;
+      }).join('')
+    : '<div class="panel-text">暂无类别数据。</div>';
+
+  els.categoryToggles.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const category = input.dataset.category || '';
+      if (!category) return;
+      if (input.checked) state.activeCategories.add(category);
+      else state.activeCategories.delete(category);
+      applyFilters();
+    });
+  });
+}
+
+function renderBatchLegend() {
+  const labels = Array.from(state.batchColors.keys());
+  const counts = new Map();
+  state.items.forEach((item) => {
+    const key = item.batch || '未标注';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  els.batchLegend.innerHTML = labels.length
+    ? labels.map((label) => {
+        const color = state.batchColors.get(label) || '#77d9b7';
+        const count = counts.get(label) || 0;
+        return `
+          <div class="legend-item">
+            <span class="legend-item__swatch" style="background:${color}"></span>
+            <span class="legend-item__label">${escapeHtml(label)}</span>
+            <span class="legend-item__count">${count}</span>
+          </div>
+        `;
+      }).join('')
+    : '<div class="panel-text">暂无批次数据。</div>';
+}
+
 function setStatus(message) {
   els.mapHint.textContent = message;
 }
@@ -601,13 +667,19 @@ function buildBatchBars() {
     .slice(0, 8);
   const max = rows[0]?.[1] || 1;
   els.batchBars.innerHTML = rows.length
-    ? rows.map(([label, count]) => `
-      <div class="bar-row">
-        <div class="bar-row__label">${escapeHtml(label)}</div>
-        <div class="bar-row__track"><div class="bar-row__fill" style="width:${Math.max(6, (count / max) * 100)}%"></div></div>
-        <div class="bar-row__count">${count}</div>
-      </div>
-    `).join('')
+    ? rows.map(([label, count]) => {
+        const color = state.batchColors.get(label) || '#77d9b7';
+        return `
+          <div class="bar-row">
+            <div class="bar-row__label">
+              <span class="bar-row__swatch" style="background:${color}"></span>
+              <span>${escapeHtml(label)}</span>
+            </div>
+            <div class="bar-row__track"><div class="bar-row__fill" style="width:${Math.max(6, (count / max) * 100)}%;background:${color}"></div></div>
+            <div class="bar-row__count">${count}</div>
+          </div>
+        `;
+      }).join('')
     : '<div class="panel-text">暂无批次统计。</div>';
 }
 
@@ -696,6 +768,7 @@ function applyFilters() {
     if (province !== 'all' && item.province !== province) return false;
     if (type !== 'all' && item.category !== type) return false;
     if (era !== 'all' && item.era !== era) return false;
+    if (state.activeCategories.size && !state.activeCategories.has(item.category)) return false;
     if (query && !item.searchBlob.includes(query)) return false;
     return true;
   });
@@ -779,7 +852,10 @@ async function ingestItems(items, message) {
   state.items = items;
   buildLookup(state.items);
   buildBatchColors(state.items);
+  buildCategoryState(state.items);
   fillFilterOptions();
+  renderCategoryToggles();
+  renderBatchLegend();
   state.filtered = [...state.items];
   updateStats();
   renderList();
@@ -804,6 +880,16 @@ els.batchFilter.addEventListener('change', applyFilters);
 els.provinceFilter.addEventListener('change', applyFilters);
 els.typeFilter.addEventListener('change', applyFilters);
 els.eraFilter.addEventListener('change', applyFilters);
+els.categoryAllBtn.addEventListener('click', () => {
+  state.activeCategories = new Set(Array.from(new Set(state.items.map((item) => item.category).filter(Boolean))));
+  renderCategoryToggles();
+  applyFilters();
+});
+els.categoryNoneBtn.addEventListener('click', () => {
+  state.activeCategories = new Set();
+  renderCategoryToggles();
+  applyFilters();
+});
 els.fileInput.addEventListener('change', async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -819,6 +905,8 @@ els.resetViewBtn.addEventListener('click', () => {
   els.provinceFilter.value = 'all';
   els.typeFilter.value = 'all';
   els.eraFilter.value = 'all';
+  state.activeCategories = new Set(Array.from(new Set(state.items.map((item) => item.category).filter(Boolean))));
+  renderCategoryToggles();
   applyFilters();
   map.setView([35.8617, 104.1954], 4);
 });
