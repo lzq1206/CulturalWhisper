@@ -41,7 +41,7 @@ const geoLayer = L.geoJSON(null, {
 
 map.addLayer(markerCluster);
 map.addLayer(geoLayer);
-map.on('zoomend', refreshMarkerIcons);
+map.on('moveend zoomend resize', scheduleVisibleRender);
 
 const state = {
   items: [],
@@ -50,6 +50,8 @@ const state = {
   clusters: new Map(),
   batchColors: new Map(),
   activeCategories: new Set(),
+  renderPending: false,
+  visibleCount: 0,
   bounds: null,
   selectedId: null,
 };
@@ -274,12 +276,49 @@ function createMarkerIcon(item, showLabel = shouldShowLabels()) {
   });
 }
 
-function refreshMarkerIcons() {
-  const showLabel = shouldShowLabels();
-  state.clusters.forEach((marker, id) => {
-    const item = state.lookup.get(id);
-    if (item && marker.setIcon) marker.setIcon(createMarkerIcon(item, showLabel));
+function scheduleVisibleRender() {
+  if (state.renderPending) return;
+  state.renderPending = true;
+  requestAnimationFrame(() => {
+    state.renderPending = false;
+    renderVisibleMarkers();
   });
+}
+
+function renderVisibleMarkers() {
+  clearLayers();
+  state.clusters.clear();
+  const visibleBounds = map.getBounds ? map.getBounds().pad(0.2) : null;
+  const showLabel = shouldShowLabels();
+  const geoFeatures = [];
+  let visibleCount = 0;
+
+  state.filtered.forEach((item) => {
+    if (!item.center || !item.geometry) return;
+    if (visibleBounds && !visibleBounds.contains(item.center)) return;
+    visibleCount += 1;
+    const marker = L.marker(item.center, {
+      icon: createMarkerIcon(item, showLabel),
+      riseOnHover: true,
+    });
+    marker.bindPopup(item.popupHtml, { closeButton: true, maxWidth: 340 });
+    marker.on('click', () => selectRecord(item.id));
+    state.clusters.set(item.id, marker);
+    markerCluster.addLayer(marker);
+
+    if (item.geometry.type !== 'Point') {
+      geoFeatures.push({
+        type: 'Feature',
+        geometry: item.geometry,
+        properties: { id: item.id, popupHtml: item.popupHtml },
+      });
+    }
+  });
+
+  geoLayer.addData({ type: 'FeatureCollection', features: geoFeatures });
+  state.visibleCount = visibleCount;
+  const selectedMarker = state.selectedId ? state.clusters.get(state.selectedId) : null;
+  if (selectedMarker && selectedMarker.openPopup) selectedMarker.openPopup();
 }
 
 function escapeHtml(text) {
@@ -869,35 +908,10 @@ function applyFilters() {
     return true;
   });
 
-  clearLayers();
-  state.clusters.clear();
-  const geoFeatures = [];
-  state.filtered.forEach((item) => {
-    if (!item.center || !item.geometry) return;
-    const latlng = item.center;
-    const marker = L.marker(latlng, {
-      icon: createMarkerIcon(item),
-      riseOnHover: true,
-    });
-    marker.bindPopup(item.popupHtml, { closeButton: true, maxWidth: 340 });
-    marker.on('click', () => selectRecord(item.id));
-    state.clusters.set(item.id, marker);
-    markerCluster.addLayer(marker);
-
-    if (item.geometry.type !== 'Point') {
-      geoFeatures.push({
-        type: 'Feature',
-        geometry: item.geometry,
-        properties: { id: item.id, popupHtml: item.popupHtml },
-      });
-    }
-  });
-  geoLayer.addData({ type: 'FeatureCollection', features: geoFeatures });
-
   renderList();
   buildBatchBars();
   updateStats();
-  refreshMarkerIcons();
+  scheduleVisibleRender();
 
   if (state.filtered.length) {
     const bounds = L.latLngBounds(state.filtered.map((item) => item.center).filter(Boolean));
@@ -948,9 +962,6 @@ async function ingestItems(items, message) {
   renderCategoryToggles();
   renderBatchLegend();
   state.filtered = [...state.items];
-  updateStats();
-  renderList();
-  buildBatchBars();
   applyFilters();
   setStatus(message || `已加载 ${items.length} 条记录。`);
 }
