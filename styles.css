@@ -645,7 +645,10 @@ body.sidebar-open .sidebar-backdrop {
   text-shadow: 0 1px 2px rgba(0,0,0,0.35);
 }
 .leaflet-container {
-  background: #091420;
+  background: #07111f;
+}
+.leaflet-tile-pane {
+  filter: brightness(0.72) contrast(1.12) saturate(0.75) sepia(0.08) hue-rotate(180deg);
 }
 .leaflet-control-attribution,
 .leaflet-control-zoom a {
