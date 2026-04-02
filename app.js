@@ -7,10 +7,10 @@ const DATA_CANDIDATES = [
 
 const map = L.map('map', { preferCanvas: true }).setView([35.8617, 104.1954], 4);
 
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  subdomains: 'abcd',
+L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}', {
+  subdomains: '1234',
   maxZoom: 19,
-  attribution: '&copy; OpenStreetMap &copy; CARTO',
+  attribution: '&copy; 高德地图',
 }).addTo(map);
 
 const markerCluster = L.layerGroup();
@@ -159,6 +159,58 @@ function batchColorFromRank(rank, total) {
   if (!Number.isFinite(rank) || !Number.isFinite(total) || total <= 1) return mixHex(start, end, 0.45);
   const t = clamp((rank - 1) / Math.max(1, total - 1), 0, 1);
   return mixHex(start, end, t);
+}
+
+function outOfChina(lng, lat) {
+  return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
+}
+
+function transformLat(x, y) {
+  let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(y * Math.PI) + 40.0 * Math.sin(y / 3.0 * Math.PI)) * 2.0 / 3.0;
+  ret += (160.0 * Math.sin(y / 12.0 * Math.PI) + 320 * Math.sin(y * Math.PI / 30.0)) * 2.0 / 3.0;
+  return ret;
+}
+
+function transformLng(x, y) {
+  let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+  ret += (20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(x * Math.PI) + 40.0 * Math.sin(x / 3.0 * Math.PI)) * 2.0 / 3.0;
+  ret += (150.0 * Math.sin(x / 12.0 * Math.PI) + 300.0 * Math.sin(x / 30.0 * Math.PI)) * 2.0 / 3.0;
+  return ret;
+}
+
+function wgs84ToGcj02(lng, lat) {
+  if (outOfChina(lng, lat)) return [lng, lat];
+  const a = 6378245.0;
+  const ee = 0.00669342162296594323;
+  let dLat = transformLat(lng - 105.0, lat - 35.0);
+  let dLng = transformLng(lng - 105.0, lat - 35.0);
+  const radLat = lat / 180.0 * Math.PI;
+  let magic = Math.sin(radLat);
+  magic = 1 - ee * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * Math.PI);
+  dLng = (dLng * 180.0) / (a / sqrtMagic * Math.cos(radLat) * Math.PI);
+  return [lng + dLng, lat + dLat];
+}
+
+function projectCoords(coords) {
+  if (!Array.isArray(coords)) return coords;
+  if (coords.length >= 2 && typeof coords[0] === 'number' && typeof coords[1] === 'number') {
+    const [lng, lat] = wgs84ToGcj02(Number(coords[0]), Number(coords[1]));
+    return coords.length > 2 ? [lng, lat, coords[2]] : [lng, lat];
+  }
+  return coords.map(projectCoords);
+}
+
+function projectGeometry(geometry) {
+  if (!geometry || !geometry.coordinates) return geometry;
+  return {
+    ...geometry,
+    coordinates: projectCoords(geometry.coordinates),
+  };
 }
 
 function categoryGlyph(category) {
@@ -431,6 +483,8 @@ function parsePlacemark(placemark, index) {
     }
   }
 
+  geometry = projectGeometry(geometry);
+
   let center = null;
   if (geometry) {
     if (geometry.type === 'Point') {
@@ -519,7 +573,7 @@ function loadFromGeoJSON(json) {
   const features = Array.isArray(json.features) ? json.features : [];
   return features.map((feature, index) => {
     const props = feature.properties || {};
-    const geometry = feature.geometry || null;
+    const geometry = projectGeometry(feature.geometry || null);
     let center = null;
     if (geometry?.type === 'Point' && Array.isArray(geometry.coordinates)) {
       center = [geometry.coordinates[1], geometry.coordinates[0]];
