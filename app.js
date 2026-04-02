@@ -1,5 +1,6 @@
 const DATA_CANDIDATES = [
   './data/CulRelPro_China_1961-2019.kml',
+  './data/CulRelPro_China_1961-2019.kmz.kml',
   './data/CulRelPro_China_1961-2019.geojson',
   './data/CulRelPro_China_1961-2019.json',
 ];
