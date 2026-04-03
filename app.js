@@ -5,6 +5,33 @@ const DATA_CANDIDATES = [
   './data/CulRelPro_China_1961-2019.json',
 ];
 
+const DYNASTY_BUCKETS = [
+  '新石器时代',
+  '夏朝',
+  '商朝',
+  '西周',
+  '东周',
+  '秦朝',
+  '西汉',
+  '东汉',
+  '三国（魏、蜀、吴）',
+  '西晋',
+  '东晋 与 十六国',
+  '南北朝',
+  '隋朝',
+  '唐朝',
+  '五代十国',
+  '北宋',
+  '辽',
+  '金',
+  '南宋',
+  '元朝',
+  '明朝',
+  '清朝',
+  '中华民国（1912年 - 1949年）',
+  '新中国：1949年10月1日至今',
+];
+
 const map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([35.8617, 104.1954], 4);
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -206,6 +233,117 @@ function batchColorFromRank(rank, total) {
   if (!Number.isFinite(rank) || !Number.isFinite(total) || total <= 1) return mixHex(start, end, 0.45);
   const t = clamp((rank - 1) / Math.max(1, total - 1), 0, 1);
   return mixHex(start, end, t);
+}
+
+function classifyDynasty(rawText) {
+  const text = safeText(rawText);
+  if (!text) return '未标注';
+
+  const keywordRules = [
+    ['新石器时代', [/新石器时代/, /新石器/, /史前/]],
+    ['夏朝', [/\b夏朝\b/, /夏代/, /夏\b/]],
+    ['商朝', [/\b商朝\b/, /商代/, /殷商/, /商\b/]],
+    ['西周', [/西周/, /周初/, /周代/, /西周时期/]],
+    ['东周', [/东周/, /春秋/, /战国/, /周末/]],
+    ['秦朝', [/秦朝/, /秦代/, /秦\b/]],
+    ['西汉', [/西汉/, /汉初/, /汉代早期/]],
+    ['东汉', [/东汉/, /汉末?/, /汉代中后期/]],
+    ['三国（魏、蜀、吴）', [/三国/, /魏蜀吴/, /魏晋南北朝前期/, /魏\b/, /蜀\b/, /吴\b/]],
+    ['西晋', [/西晋/, /晋初/, /晋代前期/]],
+    ['东晋 与 十六国', [/东晋/, /十六国/, /东晋十六国/]],
+    ['南北朝', [/南北朝/, /南朝/, /北朝/]],
+    ['隋朝', [/隋朝/, /隋代/, /隋\b/]],
+    ['唐朝', [/唐朝/, /唐代/, /唐\b/]],
+    ['五代十国', [/五代十国/, /五代/, /十国/]],
+    ['北宋', [/北宋/, /宋初/, /北宋时期/]],
+    ['辽', [/辽朝/, /辽代/, /契丹/, /辽\b/]],
+    ['金', [/金朝/, /金代/, /女真/, /金\b/]],
+    ['南宋', [/南宋/, /宋末?/, /南宋时期/]],
+    ['元朝', [/元朝/, /元代/, /元\b/]],
+    ['明朝', [/明朝/, /明代/, /明\b/]],
+    ['清朝', [/清朝/, /清代/, /清\b/]],
+    ['中华民国（1912年 - 1949年）', [/中华民国/, /民国/, /民國/]],
+    ['新中国：1949年10月1日至今', [/新中国/, /中华人民共和国/, /中华人民共和国时期/, /共和国/]],
+  ];
+
+  for (const [bucket, rules] of keywordRules) {
+    if (rules.some((rule) => rule.test(text))) return bucket;
+  }
+
+  const rangeYears = [];
+  const explicitRanges = [
+    /(?:公元前|前)?\s*(\d{1,4})\s*(?:年)?\s*[—\-－至~～到]\s*(?:公元前|前)?\s*(\d{1,4})\s*(?:年)?/g,
+    /(?:公元前|前)?\s*(\d{1,2})\s*世纪\s*[—\-－至~～到]\s*(?:公元前|前)?\s*(\d{1,2})\s*世纪/g,
+  ];
+
+  for (const pattern of explicitRanges) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const a = Number(match[1]);
+      const b = Number(match[2]);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      if (pattern.source.includes('世纪')) {
+        const y1 = a * 100 - 50;
+        const y2 = b * 100 - 50;
+        rangeYears.push((y1 + y2) / 2);
+      } else {
+        rangeYears.push((a + b) / 2);
+      }
+    }
+  }
+  if (rangeYears.length) {
+    return dynastyFromYear(Math.min(...rangeYears));
+  }
+
+  const years = [];
+  const singleYearPattern = /(?:公元前|前)?\s*(\d{1,4})\s*年/g;
+  let yearMatch;
+  while ((yearMatch = singleYearPattern.exec(text)) !== null) {
+    const num = Number(yearMatch[1]);
+    if (!Number.isFinite(num)) continue;
+    const isBce = /(?:公元前|前)\s*\d{1,4}\s*年/.test(yearMatch[0]);
+    years.push(isBce ? -num : num);
+  }
+
+  const centuryPattern = /(?:公元前|前)?\s*(\d{1,2})\s*世纪/g;
+  let centuryMatch;
+  while ((centuryMatch = centuryPattern.exec(text)) !== null) {
+    const century = Number(centuryMatch[1]);
+    if (!Number.isFinite(century)) continue;
+    const isBce = /(?:公元前|前)\s*\d{1,2}\s*世纪/.test(centuryMatch[0]);
+    const approx = century * 100 - 50;
+    years.push(isBce ? -approx : approx);
+  }
+
+  if (!years.length) return '未标注';
+  return dynastyFromYear(Math.min(...years));
+}
+
+function dynastyFromYear(year) {
+  if (!Number.isFinite(year)) return '未标注';
+  if (year < -2070) return '新石器时代';
+  if (year < -1600) return '夏朝';
+  if (year < -1046) return '商朝';
+  if (year < -771) return '西周';
+  if (year < -221) return '东周';
+  if (year < -206) return '秦朝';
+  if (year <= 8) return '西汉';
+  if (year <= 220) return '东汉';
+  if (year <= 280) return '三国（魏、蜀、吴）';
+  if (year <= 316) return '西晋';
+  if (year <= 420) return '东晋 与 十六国';
+  if (year <= 589) return '南北朝';
+  if (year <= 618) return '隋朝';
+  if (year <= 907) return '唐朝';
+  if (year <= 979) return '五代十国';
+  if (year <= 1127) return '北宋';
+  if (year <= 1234) return '金';
+  if (year <= 1279) return '南宋';
+  if (year <= 1368) return '元朝';
+  if (year <= 1644) return '明朝';
+  if (year <= 1911) return '清朝';
+  if (year <= 1949) return '中华民国（1912年 - 1949年）';
+  return '新中国：1949年10月1日至今';
 }
 
 function outOfChina(lng, lat) {
@@ -530,7 +668,8 @@ function createPopupHtml(item) {
       <div style="font-size:12px;color:#9fb3c9;line-height:1.7">
         <div><strong>批次：</strong>${escapeHtml(item.batch || '未识别')}</div>
         <div><strong>类别：</strong>${escapeHtml(item.type || '未识别')}</div>
-        <div><strong>时代：</strong>${escapeHtml(item.era || '未识别')}</div>
+        <div><strong>归类朝代：</strong>${escapeHtml(item.dynasty || '未识别')}</div>
+        <div><strong>原始时代：</strong>${escapeHtml(item.era || '未识别')}</div>
         <div><strong>省份/地区：</strong>${escapeHtml(item.province || '未识别')}</div>
         <div><strong>城市：</strong>${escapeHtml(item.city || '未识别')}</div>
         <div><strong>编号：</strong>${escapeHtml(item.code || '未识别')}</div>
@@ -563,6 +702,7 @@ function parsePlacemark(placemark, index) {
   const category = pickField(dict, ['TCN', 'tcn', '类别', 'type', 'category', '文物类型']);
   const categoryEn = pickField(dict, ['TEN', 'ten']);
   const era = pickField(dict, ['PCN', 'pcn', '时代', '年代', '朝代', '时期']);
+  const dynasty = classifyDynasty(era);
   const eraEn = pickField(dict, ['PEN', 'pen']);
   const province = pickField(dict, ['PADCN', 'padcn', '省份', 'province', '省', '行政区', '所在地', '行政区划']);
   const provinceEn = pickField(dict, ['PADEN', 'paden']);
@@ -639,6 +779,7 @@ function parsePlacemark(placemark, index) {
     type: category,
     categoryEn,
     era,
+    dynasty,
     eraEn,
     province,
     provinceEn,
@@ -666,6 +807,7 @@ function parsePlacemark(placemark, index) {
     item.type,
     item.categoryEn,
     item.era,
+    item.dynasty,
     item.eraEn,
     item.province,
     item.provinceEn,
@@ -710,6 +852,8 @@ function loadFromGeoJSON(json) {
       center = computeCenterFromGeometry(geometry);
     }
     const category = props.category || props.type || props.类型 || props.TCN || props.tcn || '';
+    const era = props.era || props.年代 || props.PCN || props.pcn || props.朝代 || '';
+    const dynasty = classifyDynasty(era);
     const item = {
       id: props.id || `${index}-${props.name || 'feature'}`,
       index,
@@ -720,7 +864,8 @@ function loadFromGeoJSON(json) {
       type: category,
       province: props.province || props.省份 || props.PADCN || props.省 || '',
       city: props.city || props.城市 || props.MADCN || props.市 || '',
-      era: props.era || props.年代 || props.PCN || props.朝代 || '',
+      era,
+      dynasty,
       raw: props,
       geometry,
       center,
@@ -732,6 +877,7 @@ function loadFromGeoJSON(json) {
       item.province,
       item.city,
       item.era,
+      item.dynasty,
       item.description,
       JSON.stringify(item.raw),
     ].join(' '));
@@ -880,7 +1026,7 @@ function fillFilterOptions() {
   const batchOptions = optionsForField(state.items, 'batch').sort((a, b) => batchRank(a) - batchRank(b) || a.localeCompare(b, 'zh-Hans-CN'));
   const provinceOptions = optionsForField(state.items, 'province');
   const typeOptions = optionsForField(state.items, 'category');
-  const eraOptions = optionsForField(state.items, 'era');
+  const eraOptions = DYNASTY_BUCKETS;
 
   const fill = (select, options) => {
     const current = readMultiSelectValues(select);
@@ -938,8 +1084,7 @@ function renderList() {
       <div class="list-item__title">${escapeHtml(item.name)}</div>
       <div class="list-item__meta">
         ${item.batch ? `<span class="pill">${escapeHtml(item.batch)}</span>` : ''}
-        ${item.category ? `<span class="pill pill--accent">${escapeHtml(item.category)}</span>` : ''}
-        ${item.era ? `<span class="pill pill--soft">${escapeHtml(item.era)}</span>` : ''}
+        ${item.dynasty ? `<span class="pill pill--accent">${escapeHtml(item.dynasty)}</span>` : ''}
         ${item.province ? `<span class="pill">${escapeHtml(item.province)}</span>` : ''}
         ${item.city ? `<span class="pill">${escapeHtml(item.city)}</span>` : ''}
       </div>
@@ -963,7 +1108,8 @@ function renderDetail(item) {
       <div><strong>英文名称：</strong>${escapeHtml(item.nameEn || '未识别')}</div>
       <div><strong>批次：</strong>${escapeHtml(item.batch || '未识别')} ${item.batchEn ? `(${escapeHtml(item.batchEn)})` : ''}</div>
       <div><strong>类别：</strong>${escapeHtml(item.type || '未识别')} ${item.categoryEn ? `(${escapeHtml(item.categoryEn)})` : ''}</div>
-      <div><strong>时代：</strong>${escapeHtml(item.era || '未识别')} ${item.eraEn ? `(${escapeHtml(item.eraEn)})` : ''}</div>
+      <div><strong>归类朝代：</strong>${escapeHtml(item.dynasty || '未识别')}</div>
+      <div><strong>原始时代：</strong>${escapeHtml(item.era || '未识别')} ${item.eraEn ? `(${escapeHtml(item.eraEn)})` : ''}</div>
       <div><strong>省份/地区：</strong>${escapeHtml(item.province || '未识别')} ${item.provinceEn ? `(${escapeHtml(item.provinceEn)})` : ''}</div>
       <div><strong>城市：</strong>${escapeHtml(item.city || '未识别')} ${item.cityEn ? `(${escapeHtml(item.cityEn)})` : ''}</div>
       <div><strong>区县：</strong>${escapeHtml(item.county || '未识别')} ${item.countyEn ? `(${escapeHtml(item.countyEn)})` : ''}</div>
@@ -1006,7 +1152,7 @@ function applyFilters() {
     if (batchValues.size && !batchValues.has(item.batch)) return false;
     if (provinceValues.size && !provinceValues.has(item.province)) return false;
     if (typeValues.size && !typeValues.has(item.category)) return false;
-    if (eraValues.size && !eraValues.has(item.era)) return false;
+    if (eraValues.size && !eraValues.has(item.dynasty)) return false;
     if (query && !item.searchBlob.includes(query)) return false;
     return true;
   });
