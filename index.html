@@ -89,37 +89,31 @@
         <div class="toolbar__search">
           <label for="searchInput">搜索</label>
           <input id="searchInput" type="search" placeholder="输入名称、地点、批次、类型关键词" />
+          <div class="multi-hint">批次 / 类别 / 时代 / 省份都支持多选（移动端可长按或逐项点选）</div>
         </div>
 
         <div class="toolbar__selects">
           <label>
             <span>批次（PackCN）</span>
-            <select id="batchFilter">
-              <option value="all">全部</option>
-            </select>
+            <select id="batchFilter" multiple size="6"></select>
           </label>
           <label>
             <span>类别（TCN）</span>
-            <select id="typeFilter">
-              <option value="all">全部</option>
-            </select>
+            <select id="typeFilter" multiple size="6"></select>
           </label>
           <label>
             <span>时代（PCN）</span>
-            <select id="eraFilter">
-              <option value="all">全部</option>
-            </select>
+            <select id="eraFilter" multiple size="6"></select>
           </label>
           <label>
             <span>省份/地区（PADCN）</span>
-            <select id="provinceFilter">
-              <option value="all">全部</option>
-            </select>
+            <select id="provinceFilter" multiple size="6"></select>
           </label>
         </div>
 
         <div class="toolbar__actions">
           <button id="resetViewBtn" class="btn btn--ghost" type="button">重置视图</button>
+          <button id="locationBtn" class="btn btn--ghost" type="button">实时定位</button>
           <label class="btn btn--primary file-btn">
             导入文件
             <input id="fileInput" type="file" accept=".kml,.kmz,.geojson,.json,.xml" hidden />

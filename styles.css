@@ -238,6 +238,16 @@ code {
   padding: 13px 14px;
   font-size: 14px;
 }
+.toolbar select[multiple] {
+  min-height: 128px;
+  padding: 10px;
+}
+.multi-hint {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
 .toolbar__selects {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -305,15 +315,16 @@ code {
   font-size: 13px;
   max-width: min(560px, calc(100% - 48px));
 }
+.map-hint.is-hidden { display: none; }
 .sidebar-panel {
   position: fixed;
   top: 0;
   left: 0;
-  width: min(520px, calc(100vw - 24px));
+  width: min(50vw, 560px);
   height: 100vh;
-  padding: 16px;
+  padding: 14px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   overflow: auto;
   z-index: 1200;
   transform: translateX(calc(-100% - 18px));
@@ -321,6 +332,7 @@ code {
   background: linear-gradient(180deg, rgba(18, 34, 57, 0.94), rgba(11, 23, 40, 0.96));
   border-right: 1px solid var(--line);
   box-shadow: 24px 0 80px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
 }
 body.sidebar-open .sidebar-panel {
   transform: translateX(0);
@@ -362,7 +374,33 @@ body.sidebar-open .sidebar-backdrop {
 .side {
   padding: 0;
   display: grid;
-  gap: 16px;
+  gap: 14px;
+}
+.sidebar-panel .hero h1 {
+  font-size: clamp(24px, 2.8vw, 38px);
+}
+.sidebar-panel .hero__lead,
+.sidebar-panel .panel-text,
+.sidebar-panel .panel-list,
+.sidebar-panel .distribution__title,
+.sidebar-panel .list-item__meta,
+.sidebar-panel .detail__meta {
+  font-size: 11px;
+}
+.sidebar-panel .stat__value {
+  font-size: 22px;
+}
+.sidebar-panel .stat__label,
+.sidebar-panel .toolbar label,
+.sidebar-panel .toggle-item__label,
+.sidebar-panel .legend-item__label {
+  font-size: 11px;
+}
+.sidebar-panel .list-item {
+  padding: 10px 12px;
+}
+.sidebar-panel .detail__title {
+  font-size: 18px;
 }
 .side__header {
   display: flex;
@@ -674,7 +712,7 @@ body.sidebar-open .sidebar-backdrop {
   }
   .hero__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .toolbar__selects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sidebar-panel { width: min(100vw, 520px); }
+  .sidebar-panel { width: min(50vw, 560px); }
   .map-wrap { min-height: 100vh; }
   #map { height: 100vh; }
 }

@@ -5,7 +5,8 @@ const DATA_CANDIDATES = [
   './data/CulRelPro_China_1961-2019.json',
 ];
 
-const map = L.map('map', { preferCanvas: true }).setView([35.8617, 104.1954], 4);
+const map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([35.8617, 104.1954], 4);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
 
 L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}', {
   subdomains: '1234',
@@ -43,6 +44,37 @@ const geoLayer = L.geoJSON(null, {
 map.addLayer(markerCluster);
 map.addLayer(geoLayer);
 map.on('moveend zoomend resize', scheduleVisibleRender);
+map.on('locationfound', (e) => {
+  state.locationWatchId = 'watching';
+  const { latlng, accuracy } = e;
+  if (!state.locationMarker) {
+    state.locationMarker = L.circleMarker(latlng, {
+      radius: 6,
+      color: '#60a5fa',
+      weight: 2,
+      fillColor: '#60a5fa',
+      fillOpacity: 1,
+      pane: 'markerPane',
+    }).addTo(map);
+    state.locationCircle = L.circle(latlng, {
+      radius: Math.max(accuracy || 0, 20),
+      color: '#60a5fa',
+      weight: 1,
+      fillColor: '#60a5fa',
+      fillOpacity: 0.08,
+      pane: 'overlayPane',
+    }).addTo(map);
+  } else {
+    state.locationMarker.setLatLng(latlng);
+    state.locationCircle.setLatLng(latlng).setRadius(Math.max(accuracy || 0, 20));
+  }
+  hideStatus();
+});
+map.on('locationerror', (e) => {
+  state.locationWatchId = null;
+  updateLocationButton(false);
+  showStatus(`定位失败：${e.message}`);
+});
 
 const state = {
   items: [],
@@ -53,6 +85,9 @@ const state = {
   activeCategories: new Set(),
   renderPending: false,
   visibleCount: 0,
+  locationWatchId: null,
+  locationMarker: null,
+  locationCircle: null,
   bounds: null,
   selectedId: null,
 };
@@ -63,6 +98,7 @@ const els = {
   provinceFilter: document.getElementById('provinceFilter'),
   typeFilter: document.getElementById('typeFilter'),
   eraFilter: document.getElementById('eraFilter'),
+  locationBtn: document.getElementById('locationBtn'),
   categoryToggles: document.getElementById('categoryToggles'),
   categoryAllBtn: document.getElementById('categoryAllBtn'),
   categoryNoneBtn: document.getElementById('categoryNoneBtn'),
@@ -85,10 +121,22 @@ const els = {
 
 function updateClusterProgress(processed, total, elapsed) {
   if (!total) return;
-  els.mapHint.textContent = `正在绘制 ${processed}/${total} 个点位…`;
+  showStatus(`正在绘制 ${processed}/${total} 个点位…`);
   if (processed >= total) {
-    els.mapHint.textContent = `已完成绘制，共 ${state.items.length} 个点位。`;
+    showStatus(`已完成绘制，共 ${state.items.length} 个点位。`);
   }
+}
+
+function showStatus(message) {
+  if (!els.mapHint) return;
+  els.mapHint.classList.remove('is-hidden');
+  els.mapHint.textContent = message;
+}
+
+function hideStatus() {
+  if (!els.mapHint) return;
+  els.mapHint.classList.add('is-hidden');
+  els.mapHint.textContent = '';
 }
 
 function mountSidebar() {
@@ -736,6 +784,10 @@ function buildBatchColors(items) {
   state.batchColors = new Map(sorted.map((label, index) => [label, batchColorFromRank(index + 1, total)]));
 }
 
+function defaultSelectedOptions(options) {
+  return new Set(options);
+}
+
 function buildCategoryState(items) {
   const categories = Array.from(new Set(items.map((item) => safeText(item.category)).filter(Boolean)));
   state.activeCategories = new Set(categories);
@@ -796,7 +848,43 @@ function renderBatchLegend() {
 }
 
 function setStatus(message) {
-  els.mapHint.textContent = message;
+  if (!message) {
+    hideStatus();
+    return;
+  }
+  showStatus(message);
+}
+
+function updateLocationButton(active) {
+  if (!els.locationBtn) return;
+  els.locationBtn.textContent = active ? '停止定位' : '实时定位';
+}
+
+function startLocationWatch() {
+  if (!navigator.geolocation) {
+    showStatus('当前浏览器不支持定位。');
+    return;
+  }
+  if (state.locationWatchId != null) return;
+  state.locationWatchId = 'pending';
+  updateLocationButton(true);
+  showStatus('正在获取实时定位…');
+  map.locate({ watch: true, setView: false, enableHighAccuracy: true, maxZoom: 16 });
+}
+
+function stopLocationWatch() {
+  map.stopLocate();
+  state.locationWatchId = null;
+  if (state.locationMarker) {
+    map.removeLayer(state.locationMarker);
+    state.locationMarker = null;
+  }
+  if (state.locationCircle) {
+    map.removeLayer(state.locationCircle);
+    state.locationCircle = null;
+  }
+  updateLocationButton(false);
+  hideStatus();
 }
 
 function updateStats() {
@@ -818,6 +906,17 @@ function optionsForField(items, field) {
   return Array.from(new Set(items.map((item) => safeText(item[field])).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
 }
 
+function readMultiSelectValues(select) {
+  return Array.from(select.selectedOptions).map((option) => option.value).filter(Boolean);
+}
+
+function setMultiSelectValues(select, values) {
+  const set = new Set(values);
+  Array.from(select.options).forEach((option) => {
+    option.selected = set.has(option.value);
+  });
+}
+
 function fillFilterOptions() {
   const batchOptions = optionsForField(state.items, 'batch').sort((a, b) => batchRank(a) - batchRank(b) || a.localeCompare(b, 'zh-Hans-CN'));
   const provinceOptions = optionsForField(state.items, 'province');
@@ -825,10 +924,10 @@ function fillFilterOptions() {
   const eraOptions = optionsForField(state.items, 'era');
 
   const fill = (select, options) => {
-    const current = select.value || 'all';
-    select.innerHTML = '<option value="all">全部</option>' + options.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('');
-    if (options.includes(current)) select.value = current;
-    else select.value = 'all';
+    const current = readMultiSelectValues(select);
+    select.innerHTML = options.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join('');
+    if (current.length) setMultiSelectValues(select, current.filter((x) => options.includes(x)));
+    else setMultiSelectValues(select, options);
   };
 
   fill(els.batchFilter, batchOptions);
@@ -939,16 +1038,16 @@ function selectRecord(id, fromList = false) {
 
 function applyFilters() {
   const query = normalizeKey(els.searchInput.value);
-  const batch = els.batchFilter.value;
-  const province = els.provinceFilter.value;
-  const type = els.typeFilter.value;
-  const era = els.eraFilter.value;
+  const batchValues = new Set(readMultiSelectValues(els.batchFilter));
+  const provinceValues = new Set(readMultiSelectValues(els.provinceFilter));
+  const typeValues = new Set(readMultiSelectValues(els.typeFilter));
+  const eraValues = new Set(readMultiSelectValues(els.eraFilter));
 
   state.filtered = state.items.filter((item) => {
-    if (batch !== 'all' && item.batch !== batch) return false;
-    if (province !== 'all' && item.province !== province) return false;
-    if (type !== 'all' && item.category !== type) return false;
-    if (era !== 'all' && item.era !== era) return false;
+    if (batchValues.size && !batchValues.has(item.batch)) return false;
+    if (provinceValues.size && !provinceValues.has(item.province)) return false;
+    if (typeValues.size && !typeValues.has(item.category)) return false;
+    if (eraValues.size && !eraValues.has(item.era)) return false;
     if (state.activeCategories.size && !state.activeCategories.has(item.category)) return false;
     if (query && !item.searchBlob.includes(query)) return false;
     return true;
@@ -1010,7 +1109,7 @@ async function ingestItems(items, message) {
   renderBatchLegend();
   state.filtered = [...state.items];
   applyFilters();
-  setStatus(message || `已加载 ${items.length} 条记录。`);
+  hideStatus();
 }
 
 async function handleFile(file) {
@@ -1025,12 +1124,17 @@ async function handleFile(file) {
 }
 
 mountSidebar();
+updateLocationButton(false);
 
 els.searchInput.addEventListener('input', applyFilters);
 els.batchFilter.addEventListener('change', applyFilters);
 els.provinceFilter.addEventListener('change', applyFilters);
 els.typeFilter.addEventListener('change', applyFilters);
 els.eraFilter.addEventListener('change', applyFilters);
+els.locationBtn.addEventListener('click', () => {
+  if (state.locationWatchId != null) stopLocationWatch();
+  else startLocationWatch();
+});
 els.sidebarToggle.addEventListener('click', () => setSidebarOpen(!document.body.classList.contains('sidebar-open')));
 els.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
 els.categoryAllBtn.addEventListener('click', () => {
@@ -1054,10 +1158,11 @@ els.fileInput.addEventListener('change', async (event) => {
 });
 els.resetViewBtn.addEventListener('click', () => {
   els.searchInput.value = '';
-  els.batchFilter.value = 'all';
-  els.provinceFilter.value = 'all';
-  els.typeFilter.value = 'all';
-  els.eraFilter.value = 'all';
+  fillFilterOptions();
+  setMultiSelectValues(els.batchFilter, Array.from(els.batchFilter.options).map((option) => option.value));
+  setMultiSelectValues(els.provinceFilter, Array.from(els.provinceFilter.options).map((option) => option.value));
+  setMultiSelectValues(els.typeFilter, Array.from(els.typeFilter.options).map((option) => option.value));
+  setMultiSelectValues(els.eraFilter, Array.from(els.eraFilter.options).map((option) => option.value));
   state.activeCategories = new Set(Array.from(new Set(state.items.map((item) => item.category).filter(Boolean))));
   renderCategoryToggles();
   applyFilters();
@@ -1090,6 +1195,14 @@ window.addEventListener('drop', async (event) => {
 (async function bootstrap() {
   try {
     await tryAutoLoad();
+    if (navigator.permissions?.query) {
+      try {
+        const perm = await navigator.permissions.query({ name: 'geolocation' });
+        if (perm.state === 'granted') startLocationWatch();
+      } catch (_) {
+        // ignore
+      }
+    }
   } catch (error) {
     console.error(error);
     setStatus('自动加载失败，请手动导入文件。');
