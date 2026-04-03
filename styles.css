@@ -379,6 +379,31 @@ body.sidebar-open .sidebar-backdrop {
 .sidebar-panel .hero h1 {
   font-size: clamp(24px, 2.8vw, 38px);
 }
+.sidebar-panel .hero__grid,
+.sidebar-panel .toolbar,
+.sidebar-panel .footer {
+  grid-template-columns: 1fr;
+}
+.sidebar-panel .hero__grid {
+  gap: 12px;
+}
+.sidebar-panel .hero__stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.sidebar-panel .toolbar {
+  gap: 12px;
+  align-items: stretch;
+}
+.sidebar-panel .toolbar__selects {
+  grid-template-columns: 1fr;
+}
+.sidebar-panel .toolbar__actions {
+  justify-content: stretch;
+}
+.sidebar-panel .toolbar__actions > * {
+  flex: 1 1 auto;
+}
 .sidebar-panel .hero__lead,
 .sidebar-panel .panel-text,
 .sidebar-panel .panel-list,
