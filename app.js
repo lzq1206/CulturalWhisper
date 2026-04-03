@@ -82,7 +82,6 @@ const state = {
   lookup: new Map(),
   clusters: new Map(),
   batchColors: new Map(),
-  activeCategories: new Set(),
   renderPending: false,
   visibleCount: 0,
   locationWatchId: null,
@@ -99,9 +98,6 @@ const els = {
   typeFilter: document.getElementById('typeFilter'),
   eraFilter: document.getElementById('eraFilter'),
   locationBtn: document.getElementById('locationBtn'),
-  categoryToggles: document.getElementById('categoryToggles'),
-  categoryAllBtn: document.getElementById('categoryAllBtn'),
-  categoryNoneBtn: document.getElementById('categoryNoneBtn'),
   batchLegend: document.getElementById('batchLegend'),
   sidebarToggle: document.getElementById('sidebarToggle'),
   sidebarBackdrop: document.getElementById('sidebarBackdrop'),
@@ -788,43 +784,6 @@ function defaultSelectedOptions(options) {
   return new Set(options);
 }
 
-function buildCategoryState(items) {
-  const dynasties = Array.from(new Set(items.map((item) => safeText(item.era)).filter(Boolean)));
-  state.activeCategories = new Set(dynasties);
-  return dynasties;
-}
-
-function renderCategoryToggles() {
-  const dynasties = Array.from(new Set(state.items.map((item) => safeText(item.era)).filter(Boolean)));
-  const counts = new Map();
-  state.items.forEach((item) => {
-    const key = item.era || '未标注';
-    counts.set(key, (counts.get(key) || 0) + 1);
-  });
-  els.categoryToggles.innerHTML = dynasties.length
-    ? dynasties.map((era) => {
-        const checked = state.activeCategories.has(era) ? 'checked' : '';
-        return `
-          <label class="toggle-item">
-            <input type="checkbox" data-era="${escapeHtml(era)}" ${checked} />
-            <span class="toggle-item__label">${escapeHtml(era)}</span>
-            <span class="toggle-item__count">${counts.get(era) || 0}</span>
-          </label>
-        `;
-      }).join('')
-    : '<div class="panel-text">暂无朝代数据。</div>';
-
-  els.categoryToggles.querySelectorAll('input[type="checkbox"]').forEach((input) => {
-    input.addEventListener('change', () => {
-      const era = input.dataset.era || '';
-      if (!era) return;
-      if (input.checked) state.activeCategories.add(era);
-      else state.activeCategories.delete(era);
-      applyFilters();
-    });
-  });
-}
-
 function renderBatchLegend() {
   const labels = Array.from(state.batchColors.keys());
   const counts = new Map();
@@ -1048,7 +1007,6 @@ function applyFilters() {
     if (provinceValues.size && !provinceValues.has(item.province)) return false;
     if (typeValues.size && !typeValues.has(item.category)) return false;
     if (eraValues.size && !eraValues.has(item.era)) return false;
-    if (state.activeCategories.size && !state.activeCategories.has(item.era)) return false;
     if (query && !item.searchBlob.includes(query)) return false;
     return true;
   });
@@ -1103,9 +1061,7 @@ async function ingestItems(items, message) {
   state.items = items;
   buildLookup(state.items);
   buildBatchColors(state.items);
-  buildCategoryState(state.items);
   fillFilterOptions();
-  renderCategoryToggles();
   renderBatchLegend();
   state.filtered = [...state.items];
   applyFilters();
@@ -1137,16 +1093,6 @@ els.locationBtn.addEventListener('click', () => {
 });
 els.sidebarToggle.addEventListener('click', () => setSidebarOpen(!document.body.classList.contains('sidebar-open')));
 els.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
-els.categoryAllBtn.addEventListener('click', () => {
-  state.activeCategories = new Set(Array.from(new Set(state.items.map((item) => item.era).filter(Boolean))));
-  renderCategoryToggles();
-  applyFilters();
-});
-els.categoryNoneBtn.addEventListener('click', () => {
-  state.activeCategories = new Set();
-  renderCategoryToggles();
-  applyFilters();
-});
 els.fileInput.addEventListener('change', async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -1163,8 +1109,6 @@ els.resetViewBtn.addEventListener('click', () => {
   setMultiSelectValues(els.provinceFilter, Array.from(els.provinceFilter.options).map((option) => option.value));
   setMultiSelectValues(els.typeFilter, Array.from(els.typeFilter.options).map((option) => option.value));
   setMultiSelectValues(els.eraFilter, Array.from(els.eraFilter.options).map((option) => option.value));
-  state.activeCategories = new Set(Array.from(new Set(state.items.map((item) => item.era).filter(Boolean))));
-  renderCategoryToggles();
   applyFilters();
   map.setView([35.8617, 104.1954], 4);
 });
