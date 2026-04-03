@@ -8,6 +8,7 @@ const DATA_CANDIDATES = [
 const DYNASTY_BUCKETS = [
   '旧石器时代',
   '新石器时代',
+  '青铜时代',
   '夏朝',
   '商朝',
   '西周',
@@ -242,6 +243,7 @@ function classifyDynasty(rawText) {
 
   const keywordRules = [
     ['旧石器时代', [/旧石器时代/, /旧石器/, /更早史前/, /更新世/]],
+    ['青铜时代', [/青铜时代/, /青铜/, /铜石并用/]],
     ['西夏', [/西夏/, /夏国/, /党项/, /李元昊/, /拓跋思恭/]],
     ['新石器时代', [/新石器时代/, /新石器/, /史前/]],
     ['夏朝', [/\b夏朝\b/, /夏代/, /夏\b/]],
@@ -273,6 +275,7 @@ function classifyDynasty(rawText) {
 
   const fuzzyTokenRules = [
     ['新石器时代', ['新石器时代', '新石器', '史前']],
+    ['青铜时代', ['青铜时代', '青铜', '铜石并用']],
     ['夏朝', ['夏朝', '夏代', '夏']],
     ['商朝', ['商朝', '商代', '殷商', '商']],
     ['西周', ['西周', '周初', '周代']],
@@ -348,6 +351,10 @@ function classifyDynasty(rawText) {
 
   if (!years.length) return '未标注';
   return dynastyFromYear(Math.min(...years));
+}
+
+function classifyDynastyBuckets(rawText) {
+  return [classifyDynasty(rawText)];
 }
 
 function dynastyFromYear(year) {
@@ -732,7 +739,10 @@ function parsePlacemark(placemark, index) {
   const category = pickField(dict, ['TCN', 'tcn', '类别', 'type', 'category', '文物类型']);
   const categoryEn = pickField(dict, ['TEN', 'ten']);
   const era = pickField(dict, ['PCN', 'pcn', '时代', '年代', '朝代', '时期']);
-  const dynasty = classifyDynasty(era);
+  const dynastyTags = /近现代重要史迹及代表性建筑/.test(category)
+    ? ['近代']
+    : classifyDynastyBuckets(era);
+  const dynasty = dynastyTags[0] || '未标注';
   const eraEn = pickField(dict, ['PEN', 'pen']);
   const province = pickField(dict, ['PADCN', 'padcn', '省份', 'province', '省', '行政区', '所在地', '行政区划']);
   const provinceEn = pickField(dict, ['PADEN', 'paden']);
@@ -809,6 +819,7 @@ function parsePlacemark(placemark, index) {
     type: category,
     categoryEn,
     era,
+    dynastyTags,
     dynasty,
     eraEn,
     province,
@@ -883,7 +894,10 @@ function loadFromGeoJSON(json) {
     }
     const category = props.category || props.type || props.类型 || props.TCN || props.tcn || '';
     const era = props.era || props.年代 || props.PCN || props.pcn || props.朝代 || '';
-    const dynasty = classifyDynasty(era);
+    const dynastyTags = /近现代重要史迹及代表性建筑/.test(category)
+      ? ['近代']
+      : classifyDynastyBuckets(era);
+    const dynasty = dynastyTags[0] || '未标注';
     const item = {
       id: props.id || `${index}-${props.name || 'feature'}`,
       index,
@@ -895,6 +909,7 @@ function loadFromGeoJSON(json) {
       province: props.province || props.省份 || props.PADCN || props.省 || '',
       city: props.city || props.城市 || props.MADCN || props.市 || '',
       era,
+      dynastyTags,
       dynasty,
       raw: props,
       geometry,
@@ -907,6 +922,7 @@ function loadFromGeoJSON(json) {
       item.province,
       item.city,
       item.era,
+      ...item.dynastyTags,
       item.dynasty,
       item.description,
       JSON.stringify(item.raw),
