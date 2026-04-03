@@ -87,9 +87,9 @@
 
       <section class="toolbar card">
         <div class="toolbar__search">
-          <label for="searchInput">搜索</label>
-          <input id="searchInput" type="search" placeholder="输入名称、地点、批次、类型关键词" />
-          <div class="multi-hint">批次 / 类别 / 时代 / 省份都支持多选（移动端可长按或逐项点选）</div>
+          <label for="searchInput">搜索与显示筛选</label>
+          <input id="searchInput" type="search" placeholder="输入名称、地点、朝代、批次关键词" />
+          <div class="multi-hint">批次 / 分类 / 朝代 / 省份都支持多选（移动端可长按或逐项点选）</div>
         </div>
 
         <div class="toolbar__selects">
@@ -102,7 +102,7 @@
             <select id="typeFilter" multiple size="6"></select>
           </label>
           <label>
-            <span>时代（PCN）</span>
+            <span>朝代（PCN）</span>
             <select id="eraFilter" multiple size="6"></select>
           </label>
           <label>
@@ -143,9 +143,9 @@
 
           <div class="switch-panel">
             <div class="switch-panel__header">
-              <div class="distribution__title">类别图层</div>
+              <div class="distribution__title">朝代归类</div>
               <div class="switch-panel__actions">
-                <button id="categoryAllBtn" class="switch-btn" type="button">全选</button>
+                <button id="categoryAllBtn" class="switch-btn" type="button">全选朝代</button>
                 <button id="categoryNoneBtn" class="switch-btn" type="button">全不选</button>
               </div>
             </div>
@@ -168,7 +168,7 @@
       <footer class="footer card">
         <div>
           <strong>数据口径</strong>
-          <p>页面结构已就绪，字段会自动从 KML 的 ExtendedData 中识别：名称、批次、类型、省份、城市、年代、简介等。</p>
+          <p>页面结构已就绪，字段会自动从 KML 的 ExtendedData 中识别：名称、批次、类型、省份、城市、朝代、简介等。</p>
         </div>
         <div>
           <strong>项目目录</strong>
