@@ -14,6 +14,7 @@ L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scal
 }).addTo(map);
 
 const markerCluster = L.layerGroup();
+const pointRenderer = L.canvas({ padding: 0.5 });
 
 const geoLayer = L.geoJSON(null, {
   style: {
@@ -276,6 +277,48 @@ function createMarkerIcon(item, showLabel = shouldShowLabels()) {
   });
 }
 
+function shapeLatLngs(center, shape, pxRadius) {
+  const p = map.latLngToLayerPoint(center);
+  const step = Math.max(1, pxRadius || 4);
+  const pts = [];
+  const push = (dx, dy) => pts.push(map.layerPointToLatLng(L.point(p.x + dx, p.y + dy)));
+  if (shape === 'square') {
+    push(-step, -step); push(step, -step); push(step, step); push(-step, step);
+  } else if (shape === 'diamond') {
+    push(0, -step); push(step, 0); push(0, step); push(-step, 0);
+  } else if (shape === 'triangle') {
+    push(0, -step); push(step, step); push(-step, step);
+  } else if (shape === 'hexagon') {
+    push(-step, 0); push(-step * 0.5, -step); push(step * 0.5, -step); push(step, 0); push(step * 0.5, step); push(-step * 0.5, step);
+  } else {
+    return null;
+  }
+  return pts;
+}
+
+function createCanvasShapeLayer(item) {
+  const color = state.batchColors.get(item.batch) || '#77d9b7';
+  const shape = categoryShape(item.category);
+  const latlngs = shapeLatLngs(item.center, shape, map.getZoom() >= 8 ? 5 : 3);
+  if (!latlngs) {
+    return L.circleMarker(item.center, {
+      renderer: pointRenderer,
+      radius: map.getZoom() >= 8 ? 3.5 : 2.2,
+      weight: 0,
+      fillColor: color,
+      fillOpacity: 0.95,
+      color,
+    });
+  }
+  return L.polygon(latlngs, {
+    renderer: pointRenderer,
+    weight: 0,
+    color,
+    fillColor: color,
+    fillOpacity: 0.95,
+  });
+}
+
 function scheduleVisibleRender() {
   if (state.renderPending) return;
   state.renderPending = true;
@@ -291,21 +334,12 @@ function renderVisibleMarkers() {
   const visibleBounds = map.getBounds ? map.getBounds().pad(0.2) : null;
   const showLabel = shouldShowLabels();
   const geoFeatures = [];
-  let visibleCount = 0;
+  const visibleItems = [];
 
   state.filtered.forEach((item) => {
     if (!item.center || !item.geometry) return;
     if (visibleBounds && !visibleBounds.contains(item.center)) return;
-    visibleCount += 1;
-    const marker = L.marker(item.center, {
-      icon: createMarkerIcon(item, showLabel),
-      riseOnHover: true,
-    });
-    marker.bindPopup(item.popupHtml, { closeButton: true, maxWidth: 340 });
-    marker.on('click', () => selectRecord(item.id));
-    state.clusters.set(item.id, marker);
-    markerCluster.addLayer(marker);
-
+    visibleItems.push(item);
     if (item.geometry.type !== 'Point') {
       geoFeatures.push({
         type: 'Feature',
@@ -313,6 +347,20 @@ function renderVisibleMarkers() {
         properties: { id: item.id, popupHtml: item.popupHtml },
       });
     }
+  });
+
+  const visibleCount = visibleItems.length;
+  const useDom = showLabel && visibleCount <= 500;
+
+  visibleItems.forEach((item) => {
+    const layer = useDom
+      ? L.marker(item.center, { icon: createMarkerIcon(item, true), riseOnHover: true })
+      : createCanvasShapeLayer(item);
+
+    layer.bindPopup(item.popupHtml, { closeButton: true, maxWidth: 340 });
+    layer.on('click', () => selectRecord(item.id));
+    state.clusters.set(item.id, layer);
+    markerCluster.addLayer(layer);
   });
 
   geoLayer.addData({ type: 'FeatureCollection', features: geoFeatures });
