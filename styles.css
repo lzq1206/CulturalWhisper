@@ -750,6 +750,47 @@ body.sidebar-open .sidebar-backdrop {
   .toolbar__actions { justify-content: stretch; }
   .toolbar__actions > * { flex: 1 1 auto; }
   .toolbar__selects { grid-template-columns: 1fr; }
-  .sidebar-panel { width: min(100vw, 520px); }
+  /* Keep the mobile drawer readable without covering the whole map. */
+  .sidebar-panel {
+    width: min(88vw, 390px);
+    padding: 9px;
+    gap: 9px;
+    font-size: 11px;
+  }
+  .sidebar-panel .hero,
+  .sidebar-panel .toolbar,
+  .sidebar-panel .footer,
+  .sidebar-panel .side { border-radius: 14px; }
+  .sidebar-panel .hero { padding: 12px; }
+  .sidebar-panel .hero h1 { font-size: 22px; }
+  .sidebar-panel .hero__lead,
+  .sidebar-panel .panel-text,
+  .sidebar-panel .panel-list,
+  .sidebar-panel .distribution__title,
+  .sidebar-panel .list-item__meta,
+  .sidebar-panel .detail__meta { font-size: 10px; }
+  .sidebar-panel .panel-card,
+  .sidebar-panel .distribution,
+  .sidebar-panel .switch-panel,
+  .sidebar-panel .detail { padding: 10px; border-radius: 12px; }
+  .sidebar-panel .toolbar { padding: 10px; gap: 9px; }
+  .sidebar-panel .toolbar__selects { gap: 8px; }
+  .sidebar-panel .toolbar input,
+  .sidebar-panel .toolbar select { border-radius: 10px; padding: 8px 9px; font-size: 11px; }
+  .sidebar-panel .toolbar select[multiple] { height: 82px; min-height: 0; padding: 4px; }
+  .sidebar-panel .toolbar label { margin-bottom: 4px; font-size: 10px; }
+  .sidebar-panel .multi-hint { margin-top: 5px; font-size: 9px; }
+  .sidebar-panel .btn,
+  .sidebar-panel .file-btn { border-radius: 10px; padding: 9px 8px; font-size: 11px; }
+  .sidebar-panel .hero__stats { gap: 7px; }
+  .sidebar-panel .stat { padding: 9px; border-radius: 11px; }
+  .sidebar-panel .stat__value { font-size: 18px; }
+  .sidebar-panel .stat__label,
+  .sidebar-panel .toggle-item__label,
+  .sidebar-panel .legend-item__label { font-size: 10px; }
+  .sidebar-panel .list { max-height: 240px; gap: 7px; }
+  .sidebar-panel .list-item { padding: 8px 9px; border-radius: 11px; }
+  .sidebar-panel .detail { min-height: 130px; max-height: 240px; }
+  .sidebar-fab { top: 10px; left: 10px; padding: 9px 12px; font-size: 12px; }
   .bar-row { grid-template-columns: 70px 1fr 36px; }
 }
