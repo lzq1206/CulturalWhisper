@@ -35,7 +35,9 @@ const DYNASTY_BUCKETS = [
 ];
 
 const map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([35.8617, 104.1954], 4);
-L.control.zoom({ position: 'bottomright' }).addTo(map);
+if (map.attributionControl) {
+  map.attributionControl.setPosition('bottomleft');
+}
 
 L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}', {
   subdomains: '1234',
@@ -66,14 +68,26 @@ const geoLayer = L.geoJSON(null, {
   onEachFeature(feature, layer) {
     const props = feature.properties || {};
     layer.on('click', () => selectRecord(props.id));
-    if (props.popupHtml) layer.bindPopup(props.popupHtml);
   },
 });
 
 map.addLayer(markerCluster);
 map.addLayer(geoLayer);
 map.on('moveend zoomend resize', scheduleVisibleRender);
+map.on('popupopen', (event) => {
+  const popupEl = event.popup?.getElement?.();
+  if (!popupEl) return;
+  const btn = popupEl.querySelector('[data-open-detail]');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-open-detail');
+      if (id) openDetailInDock(id);
+    });
+  }
+});
 map.on('locationfound', (e) => {
+  const shouldCenter = state.shouldCenterOnLocate;
+  state.shouldCenterOnLocate = false;
   state.locationWatchId = 'watching';
   const { latlng, accuracy } = e;
   if (!state.locationMarker) {
@@ -97,10 +111,14 @@ map.on('locationfound', (e) => {
     state.locationMarker.setLatLng(latlng);
     state.locationCircle.setLatLng(latlng).setRadius(Math.max(accuracy || 0, 20));
   }
+  if (shouldCenter) {
+    map.flyTo(latlng, Math.max(map.getZoom(), 11), { duration: 0.8 });
+  }
   hideStatus();
 });
 map.on('locationerror', (e) => {
   state.locationWatchId = null;
+  state.shouldCenterOnLocate = false;
   updateLocationButton(false);
   showStatus(`定位失败：${e.message}`);
 });
@@ -114,10 +132,12 @@ const state = {
   renderPending: false,
   visibleCount: 0,
   locationWatchId: null,
+  shouldCenterOnLocate: false,
   locationMarker: null,
   locationCircle: null,
   bounds: null,
   selectedId: null,
+  activeFilterKey: null,
 };
 
 const els = {
@@ -128,9 +148,6 @@ const els = {
   eraFilter: document.getElementById('eraFilter'),
   locationBtn: document.getElementById('locationBtn'),
   batchLegend: document.getElementById('batchLegend'),
-  sidebarToggle: document.getElementById('sidebarToggle'),
-  sidebarBackdrop: document.getElementById('sidebarBackdrop'),
-  sidebar: document.getElementById('sidebar'),
   fileInput: document.getElementById('fileInput'),
   resetViewBtn: document.getElementById('resetViewBtn'),
   mapHint: document.getElementById('mapHint'),
@@ -142,7 +159,52 @@ const els = {
   statProvinces: document.getElementById('statProvinces'),
   statFiltered: document.getElementById('statFiltered'),
   batchBars: document.getElementById('batchBars'),
+  topCountBadge: document.getElementById('topCountBadge'),
+  dockSummaryText: document.getElementById('dockSummaryText'),
+  detailDot: document.getElementById('detailDot'),
+  zoomInBtn: document.getElementById('zoomInBtn'),
+  zoomOutBtn: document.getElementById('zoomOutBtn'),
+  fitChinaBtn: document.getElementById('fitChinaBtn'),
+  legendToggleBtn: document.getElementById('legendToggleBtn'),
+  legendCloseBtn: document.getElementById('legendCloseBtn'),
+  heritageLegend: document.getElementById('heritageLegend'),
+  bottomControlDock: document.getElementById('bottom-control-dock'),
+  dockToggleBtn: document.getElementById('dockToggleBtn'),
+  moreContent: document.getElementById('moreContent'),
+  moreTabs: Array.from(document.querySelectorAll('.more-tab')),
+  filterPills: Array.from(document.querySelectorAll('.filter-pill')),
+  filterPopover: document.getElementById('filterPopover'),
+  filterPopoverTitle: document.getElementById('filterPopoverTitle'),
+  filterPopoverList: document.getElementById('filterPopoverList'),
+  filterSelectAllBtn: document.getElementById('filterSelectAllBtn'),
+  filterCloseBtn: document.getElementById('filterCloseBtn'),
 };
+
+const FILTER_META = {
+  batch: { label: '批次', title: '筛选批次（可多选）', select: els.batchFilter, showBatchColor: true },
+  type: { label: '类别', title: '筛选文保类别（可多选）', select: els.typeFilter },
+  era: { label: '朝代', title: '筛选所属朝代（可多选）', select: els.eraFilter },
+  province: { label: '省份', title: '筛选省份 / 地区（可多选）', select: els.provinceFilter },
+};
+
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 790px)').matches;
+}
+
+function getDockOccupiedHeight() {
+  if (!els.bottomControlDock || els.bottomControlDock.classList.contains('is-collapsed')) return 60;
+  return els.bottomControlDock.getBoundingClientRect().height + 16;
+}
+
+function getPopupOptions() {
+  const bottomPad = isMobileViewport() ? Math.min(getDockOccupiedHeight() + 24, window.innerHeight * 0.55) : 32;
+  return {
+    closeButton: true,
+    maxWidth: isMobileViewport() ? Math.min(300, window.innerWidth - 48) : 340,
+    autoPanPaddingTopLeft: L.point(16, 56),
+    autoPanPaddingBottomRight: L.point(16, bottomPad),
+  };
+}
 
 function updateClusterProgress(processed, total, elapsed) {
   if (!total) return;
@@ -164,22 +226,159 @@ function hideStatus() {
   els.mapHint.textContent = '';
 }
 
-function mountSidebar() {
-  if (!els.sidebar) return;
-  const targets = [
-    document.querySelector('header.hero'),
-    document.querySelector('section.toolbar'),
-    document.querySelector('aside.side'),
-    document.querySelector('footer.footer'),
-  ].filter(Boolean);
-  targets.forEach((node) => {
-    if (node.parentElement !== els.sidebar) els.sidebar.appendChild(node);
+function setDockCollapsed(collapsed) {
+  if (!els.bottomControlDock || !els.dockToggleBtn) return;
+  els.bottomControlDock.classList.toggle('is-collapsed', collapsed);
+  if (collapsed) {
+    closeFilterPopover();
+    setLegendOpen(false);
+  }
+  const label = collapsed ? '展开底部控制面板' : '收起底部控制面板';
+  els.dockToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+  els.dockToggleBtn.setAttribute('aria-label', label);
+  els.dockToggleBtn.title = label;
+  const hiddenLabel = els.dockToggleBtn.querySelector('.visually-hidden');
+  if (hiddenLabel) hiddenLabel.textContent = label;
+}
+
+function setMoreTab(tab) {
+  document.body.dataset.moreTab = tab;
+  els.moreTabs.forEach((btn) => {
+    const active = btn.dataset.moreTab === tab;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', String(active));
   });
 }
 
-function setSidebarOpen(open) {
-  document.body.classList.toggle('sidebar-open', open);
-  window.setTimeout(() => map.invalidateSize(), 240);
+function setLegendOpen(open) {
+  if (!els.heritageLegend || !els.legendToggleBtn) return;
+  if (open) {
+    setDockCollapsed(false);
+    closeFilterPopover();
+  }
+  els.heritageLegend.hidden = !open;
+  els.legendToggleBtn.setAttribute('aria-pressed', String(open));
+}
+
+function isFilterAllSelected(select) {
+  if (!select) return true;
+  const total = select.options.length;
+  if (!total) return true;
+  const selectedCount = select.selectedOptions.length;
+  return selectedCount === 0 || selectedCount === total;
+}
+
+function updateFilterPills() {
+  let hasActiveFilter = Boolean(normalizeKey(els.searchInput?.value));
+  els.filterPills.forEach((pill) => {
+    const key = pill.dataset.filter;
+    const meta = FILTER_META[key];
+    if (!meta?.select) return;
+    const allSelected = isFilterAllSelected(meta.select);
+    const count = meta.select.selectedOptions.length;
+    if (!allSelected) hasActiveFilter = true;
+    const labelEl = pill.querySelector('.filter-pill__label');
+    if (labelEl) {
+      labelEl.textContent = allSelected ? meta.label : `${meta.label}·${count}`;
+    }
+    pill.classList.toggle('has-selection', !allSelected);
+    pill.classList.toggle('is-open', state.activeFilterKey === key);
+    pill.setAttribute('aria-expanded', String(state.activeFilterKey === key));
+  });
+  if (els.resetViewBtn) {
+    els.resetViewBtn.classList.toggle('has-filters', hasActiveFilter);
+  }
+}
+
+function renderFilterPopover() {
+  const key = state.activeFilterKey;
+  const meta = key ? FILTER_META[key] : null;
+  if (!meta?.select || !els.filterPopover || !els.filterPopoverList) return;
+
+  els.filterPopoverTitle.textContent = meta.title;
+  const options = Array.from(meta.select.options).map((opt) => opt.value);
+  const allSelected = isFilterAllSelected(meta.select);
+  const selectedSet = new Set(readMultiSelectValues(meta.select));
+
+  const frag = document.createDocumentFragment();
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button';
+  allBtn.className = `filter-chip${allSelected ? ' is-active' : ''}`;
+  allBtn.textContent = '全部';
+  allBtn.addEventListener('click', () => {
+    setMultiSelectValues(meta.select, options);
+    applyFilters();
+    renderFilterPopover();
+  });
+  frag.appendChild(allBtn);
+
+  options.forEach((value) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const active = !allSelected && selectedSet.has(value);
+    btn.className = `filter-chip${active ? ' is-active' : ''}`;
+    if (meta.showBatchColor) {
+      const swatch = document.createElement('span');
+      swatch.className = 'filter-chip__swatch';
+      swatch.style.background = state.batchColors.get(value) || '#77d9b7';
+      btn.appendChild(swatch);
+    }
+    const textNode = document.createElement('span');
+    textNode.textContent = value;
+    btn.appendChild(textNode);
+
+    btn.addEventListener('click', () => {
+      if (isFilterAllSelected(meta.select)) {
+        setMultiSelectValues(meta.select, [value]);
+      } else {
+        const next = new Set(readMultiSelectValues(meta.select));
+        if (next.has(value)) next.delete(value);
+        else next.add(value);
+        setMultiSelectValues(meta.select, next.size ? Array.from(next) : options);
+      }
+      applyFilters();
+      renderFilterPopover();
+    });
+    frag.appendChild(btn);
+  });
+
+  els.filterPopoverList.replaceChildren(frag);
+}
+
+function openFilterPopover(key) {
+  if (!FILTER_META[key] || !els.filterPopover) return;
+  if (state.activeFilterKey === key && !els.filterPopover.hidden) {
+    closeFilterPopover();
+    return;
+  }
+  setDockCollapsed(false);
+  setLegendOpen(false);
+  if (isMobileViewport() && els.moreContent?.open) {
+    els.moreContent.open = false;
+  }
+  state.activeFilterKey = key;
+  els.filterPopover.hidden = false;
+  renderFilterPopover();
+  updateFilterPills();
+}
+
+function closeFilterPopover() {
+  state.activeFilterKey = null;
+  if (els.filterPopover) els.filterPopover.hidden = true;
+  updateFilterPills();
+}
+
+function openDetailInDock(id) {
+  const item = state.lookup.get(id);
+  if (!item) return;
+  state.selectedId = id;
+  renderDetail(item);
+  updateSelectedListHighlight();
+  setDockCollapsed(false);
+  closeFilterPopover();
+  setLegendOpen(false);
+  setMoreTab('detail');
+  if (els.moreContent) els.moreContent.open = true;
 }
 
 function safeText(value) {
@@ -576,7 +775,6 @@ function renderVisibleMarkers() {
       ? L.marker(item.center, { icon: createMarkerIcon(item, true), riseOnHover: true })
       : createCanvasShapeLayer(item);
 
-    layer.bindPopup(item.popupHtml, { closeButton: true, maxWidth: 340 });
     layer.on('click', () => selectRecord(item.id));
     state.clusters.set(item.id, layer);
     markerCluster.addLayer(layer);
@@ -700,9 +898,9 @@ function geometryToGeoJSON(geometryNode) {
 
 function createPopupHtml(item) {
   return `
-    <div style="min-width:260px;max-width:340px">
-      <div style="font-size:16px;font-weight:800;margin-bottom:8px">${escapeHtml(item.name)}</div>
-      <div style="font-size:12px;color:#9fb3c9;line-height:1.7">
+    <div class="heritage-popup">
+      <div class="heritage-popup__title">${escapeHtml(item.name)}</div>
+      <div class="heritage-popup__meta">
         <div><strong>批次：</strong>${escapeHtml(item.batch || '未识别')}</div>
         <div><strong>类别：</strong>${escapeHtml(item.type || '未识别')}</div>
         <div><strong>归类朝代：</strong>${escapeHtml(item.dynasty || '未识别')}</div>
@@ -711,6 +909,7 @@ function createPopupHtml(item) {
         <div><strong>城市：</strong>${escapeHtml(item.city || '未识别')}</div>
         <div><strong>编号：</strong>${escapeHtml(item.code || '未识别')}</div>
       </div>
+      ${item.id ? `<div class="heritage-popup__action"><button class="heritage-popup__btn" type="button" data-open-detail="${escapeHtml(item.id)}">查看完整详情</button></div>` : ''}
     </div>
   `;
 }
@@ -807,8 +1006,9 @@ function parsePlacemark(placemark, index) {
     }
   }
 
+  const id = `${index}-${code || name}`;
   const item = {
-    id: `${index}-${code || name}`,
+    id,
     index,
     name,
     nameEn,
@@ -836,7 +1036,7 @@ function parsePlacemark(placemark, index) {
     raw,
     geometry,
     center,
-    popupHtml: createPopupHtml({ name, batch, type: category, province, city, era, code }),
+    popupHtml: createPopupHtml({ id, name, batch, type: category, dynasty, province, city, era, code }),
   };
 
   item.searchBlob = normalizeKey([
@@ -1008,16 +1208,21 @@ function setStatus(message) {
 
 function updateLocationButton(active) {
   if (!els.locationBtn) return;
-  els.locationBtn.textContent = active ? '停止定位' : '实时定位';
+  const label = active ? '停止实时定位' : '开启实时定位';
+  els.locationBtn.classList.toggle('is-active', active);
+  els.locationBtn.setAttribute('aria-pressed', String(active));
+  els.locationBtn.setAttribute('aria-label', label);
+  els.locationBtn.title = active ? '停止定位' : '实时定位';
 }
 
-function startLocationWatch() {
+function startLocationWatch(centerOnFix = false) {
   if (!navigator.geolocation) {
     showStatus('当前浏览器不支持定位。');
     return;
   }
   if (state.locationWatchId != null) return;
   state.locationWatchId = 'pending';
+  state.shouldCenterOnLocate = centerOnFix;
   updateLocationButton(true);
   showStatus('正在获取实时定位…');
   map.locate({ watch: true, setView: false, enableHighAccuracy: true, maxZoom: 16 });
@@ -1026,6 +1231,7 @@ function startLocationWatch() {
 function stopLocationWatch() {
   map.stopLocate();
   state.locationWatchId = null;
+  state.shouldCenterOnLocate = false;
   if (state.locationMarker) {
     map.removeLayer(state.locationMarker);
     state.locationMarker = null;
@@ -1050,6 +1256,15 @@ function updateStats() {
   els.statProvinces.textContent = String(provinces.size);
   els.statFiltered.textContent = String(filtered.length);
   els.resultCount.textContent = String(filtered.length);
+  if (els.topCountBadge) {
+    els.topCountBadge.textContent = `${filtered.length} 处`;
+  }
+  if (els.dockSummaryText) {
+    els.dockSummaryText.textContent =
+      filtered.length === items.length
+        ? `共 ${items.length} 处 · 早红晚蓝`
+        : `已筛选 ${filtered.length} / ${items.length} 处`;
+  }
   els.mapHint.dataset.categoryCount = String(categories.size);
 }
 
@@ -1085,6 +1300,7 @@ function fillFilterOptions() {
   fill(els.provinceFilter, provinceOptions);
   fill(els.typeFilter, typeOptions);
   fill(els.eraFilter, eraOptions);
+  updateFilterPills();
 }
 
 function buildBatchBars() {
@@ -1114,6 +1330,13 @@ function buildBatchBars() {
     : '<div class="panel-text">暂无批次统计。</div>';
 }
 
+function updateSelectedListHighlight() {
+  if (!els.resultList) return;
+  els.resultList.querySelectorAll('.list-item').forEach((node) => {
+    node.classList.toggle('is-selected', node.dataset.id === state.selectedId);
+  });
+}
+
 function renderList() {
   els.resultList.innerHTML = '';
   if (!state.filtered.length) {
@@ -1124,7 +1347,7 @@ function renderList() {
   const frag = document.createDocumentFragment();
   state.filtered.slice(0, 500).forEach((item) => {
     const node = document.createElement('article');
-    node.className = 'list-item';
+    node.className = `list-item${item.id === state.selectedId ? ' is-selected' : ''}`;
     node.dataset.id = item.id;
     node.innerHTML = `
       <div class="list-item__title">${escapeHtml(item.name)}</div>
@@ -1142,14 +1365,20 @@ function renderList() {
 }
 
 function renderDetail(item) {
+  if (els.detailDot) {
+    els.detailDot.hidden = !item;
+  }
   if (!item) {
-    els.detailCard.innerHTML = '<div class="detail__empty">点击左侧结果或地图点位查看详情</div>';
+    els.detailCard.innerHTML = '<div class="detail__empty">点击地图点位或检索结果查看详情</div>';
     return;
   }
 
   const coords = item.center ? `${item.center[0].toFixed(5)}, ${item.center[1].toFixed(5)}` : '未识别';
   els.detailCard.innerHTML = `
-    <div class="detail__title">${escapeHtml(item.name)}</div>
+    <div class="detail__head">
+      <div class="detail__title">${escapeHtml(item.name)}</div>
+      <button class="detail__focus-btn" type="button" data-focus-id="${escapeHtml(item.id)}">定位</button>
+    </div>
     <div class="detail__meta">
       <div><strong>英文名称：</strong>${escapeHtml(item.nameEn || '未识别')}</div>
       <div><strong>批次：</strong>${escapeHtml(item.batch || '未识别')} ${item.batchEn ? `(${escapeHtml(item.batchEn)})` : ''}</div>
@@ -1165,17 +1394,39 @@ function renderDetail(item) {
     </div>
     <div class="detail__desc">${escapeHtml(summarizeDescription(item))}</div>
   `;
+
+  const focusBtn = els.detailCard.querySelector('[data-focus-id]');
+  if (focusBtn) {
+    focusBtn.addEventListener('click', () => {
+      flyToItem(item, true);
+    });
+  }
 }
 
-function flyToItem(item) {
+function flyToItem(item, openPopupAfter = false) {
   if (!item?.center) return;
-  map.flyTo(item.center, 10, { duration: 0.9 });
+  const targetZoom = Math.max(map.getZoom(), 10);
+  let targetLatLng = L.latLng(item.center);
+  if (isMobileViewport()) {
+    const dockHeight = getDockOccupiedHeight();
+    const projected = map.project(targetLatLng, targetZoom);
+    // Place the marker in the lower-middle of the visible upper map so its popup clears #top-brand.
+    targetLatLng = map.unproject(projected.add([0, Math.round(dockHeight * 0.35)]), targetZoom);
+  }
+  if (openPopupAfter) {
+    map.once('moveend', () => {
+      highlightOnMap(item);
+    });
+  }
+  map.flyTo(targetLatLng, targetZoom, { duration: 0.8 });
 }
 
 function highlightOnMap(item) {
   if (!item?.center) return;
-  const layer = state.clusters.get(item.id);
-  if (layer && layer.openPopup) layer.openPopup();
+  const popup = L.popup(getPopupOptions())
+    .setLatLng(item.center)
+    .setContent(item.popupHtml);
+  popup.openOn(map);
 }
 
 function selectRecord(id, fromList = false) {
@@ -1183,8 +1434,15 @@ function selectRecord(id, fromList = false) {
   if (!item) return;
   state.selectedId = id;
   renderDetail(item);
-  if (fromList) flyToItem(item);
-  highlightOnMap(item);
+  updateSelectedListHighlight();
+  if (fromList) {
+    closeFilterPopover();
+    setLegendOpen(false);
+    setMoreTab('detail');
+    flyToItem(item, true);
+  } else {
+    highlightOnMap(item);
+  }
 }
 
 function applyFilters() {
@@ -1206,6 +1464,7 @@ function applyFilters() {
   renderList();
   buildBatchBars();
   updateStats();
+  updateFilterPills();
   scheduleVisibleRender();
 
   if (state.selectedId) {
@@ -1245,7 +1504,7 @@ async function tryAutoLoad() {
       console.warn(error);
     }
   }
-  setStatus('未找到本地数据文件。请把 KML 放到 data/ 目录，或点击“导入文件”。');
+  setStatus('未找到本地数据文件。请把 KML 放到 data/ 目录，或在“统计与导入”中导入文件。');
   return false;
 }
 
@@ -1271,7 +1530,6 @@ async function handleFile(file) {
   await ingestItems(items, `已从 ${file.name} 导入 ${items.length} 条记录。`);
 }
 
-mountSidebar();
 updateLocationButton(false);
 
 els.searchInput.addEventListener('input', applyFilters);
@@ -1279,12 +1537,69 @@ els.batchFilter.addEventListener('change', applyFilters);
 els.provinceFilter.addEventListener('change', applyFilters);
 els.typeFilter.addEventListener('change', applyFilters);
 els.eraFilter.addEventListener('change', applyFilters);
+
+els.zoomInBtn?.addEventListener('click', () => map.zoomIn());
+els.zoomOutBtn?.addEventListener('click', () => map.zoomOut());
+els.fitChinaBtn?.addEventListener('click', () => map.flyTo([35.8617, 104.1954], 4, { duration: 0.7 }));
+els.legendToggleBtn?.addEventListener('click', () => setLegendOpen(Boolean(els.heritageLegend?.hidden)));
+els.legendCloseBtn?.addEventListener('click', () => setLegendOpen(false));
+
+els.dockToggleBtn?.addEventListener('click', () => {
+  const collapsed = !els.bottomControlDock.classList.contains('is-collapsed');
+  setDockCollapsed(collapsed);
+});
+
+els.moreTabs.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setMoreTab(btn.dataset.moreTab || 'list');
+  });
+});
+
+els.moreContent?.addEventListener('toggle', () => {
+  if (els.moreContent.open) {
+    closeFilterPopover();
+    setLegendOpen(false);
+  }
+});
+
+els.filterPills.forEach((pill) => {
+  pill.addEventListener('click', () => {
+    openFilterPopover(pill.dataset.filter);
+  });
+});
+
+els.filterSelectAllBtn?.addEventListener('click', () => {
+  const meta = state.activeFilterKey ? FILTER_META[state.activeFilterKey] : null;
+  if (!meta?.select) return;
+  const allOptions = Array.from(meta.select.options).map((option) => option.value);
+  setMultiSelectValues(meta.select, allOptions);
+  applyFilters();
+  renderFilterPopover();
+});
+
+els.filterCloseBtn?.addEventListener('click', closeFilterPopover);
+
+document.addEventListener('click', (event) => {
+  if (!els.bottomControlDock) return;
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  const insideDock = path.includes(els.bottomControlDock) || (event.target instanceof Node && els.bottomControlDock.contains(event.target));
+  const insideLegendBtn = Boolean(
+    els.legendToggleBtn &&
+      (path.includes(els.legendToggleBtn) || (event.target instanceof Node && els.legendToggleBtn.contains(event.target))),
+  );
+  if (!els.filterPopover?.hidden && !insideDock) {
+    closeFilterPopover();
+  }
+  if (!els.heritageLegend?.hidden && !insideDock && !insideLegendBtn) {
+    setLegendOpen(false);
+  }
+});
+
 els.locationBtn.addEventListener('click', () => {
   if (state.locationWatchId != null) stopLocationWatch();
-  else startLocationWatch();
+  else startLocationWatch(true);
 });
-els.sidebarToggle.addEventListener('click', () => setSidebarOpen(!document.body.classList.contains('sidebar-open')));
-els.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
+
 els.fileInput.addEventListener('change', async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -1294,6 +1609,7 @@ els.fileInput.addEventListener('change', async (event) => {
     alert(error.message || String(error));
   }
 });
+
 els.resetViewBtn.addEventListener('click', () => {
   els.searchInput.value = '';
   fillFilterOptions();
@@ -1301,12 +1617,17 @@ els.resetViewBtn.addEventListener('click', () => {
   setMultiSelectValues(els.provinceFilter, Array.from(els.provinceFilter.options).map((option) => option.value));
   setMultiSelectValues(els.typeFilter, Array.from(els.typeFilter.options).map((option) => option.value));
   setMultiSelectValues(els.eraFilter, Array.from(els.eraFilter.options).map((option) => option.value));
+  closeFilterPopover();
   applyFilters();
   map.setView([35.8617, 104.1954], 4);
 });
 
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') setSidebarOpen(false);
+  if (event.key === 'Escape') {
+    if (!els.filterPopover?.hidden) closeFilterPopover();
+    else if (!els.heritageLegend?.hidden) setLegendOpen(false);
+    else if (els.moreContent?.open) els.moreContent.open = false;
+  }
 });
 
 window.addEventListener('dragover', (event) => {
@@ -1334,7 +1655,7 @@ window.addEventListener('drop', async (event) => {
     if (navigator.permissions?.query) {
       try {
         const perm = await navigator.permissions.query({ name: 'geolocation' });
-        if (perm.state === 'granted') startLocationWatch();
+        if (perm.state === 'granted') startLocationWatch(false);
       } catch (_) {
         // ignore
       }

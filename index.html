@@ -2,7 +2,8 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#07111f" />
     <meta name="description" content="CulturalWhisper：全国重点文物保护单位地图展示，支持 KML 导入、检索、筛选与分布统计。" />
     <title>CulturalWhisper | 全国重点文物保护单位地图</title>
     <link rel="preconnect" href="https://unpkg.com" />
@@ -11,159 +12,213 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
-    <div class="bg-glow bg-glow-a"></div>
-    <div class="bg-glow bg-glow-b"></div>
+  <body data-more-tab="list">
+    <main class="map-shell">
+      <div id="map" role="application" aria-label="全国重点文物保护单位可交互地图"></div>
 
-    <button id="sidebarToggle" class="sidebar-fab" type="button" aria-label="打开侧边栏">☰ 菜单</button>
-    <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
-    <aside id="sidebar" class="sidebar-panel" aria-label="控制侧边栏"></aside>
-
-    <main class="shell">
-      <header class="hero card">
-        <div class="hero__topline">
-          <span class="badge">CulturalWhisper</span>
-          <span class="badge badge--soft">全国重点文物保护单位空间展示</span>
-          <span class="badge badge--soft">KML / GeoJSON / 直接上传</span>
+      <header id="top-brand" class="top-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M6 12.5 16 7l10 5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M9.5 13v8.5M16 13v8.5M22.5 13v8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            <path d="M6.5 23.5h19" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" />
+          </svg>
         </div>
-
-        <div class="hero__grid">
-          <section>
-            <p class="eyebrow">China Heritage Map</p>
-            <h1>把全国重点文物保护单位放到一张可检索的地图上</h1>
-            <p class="hero__lead">
-              本页会优先加载 <code>./data/CulRelPro_China_1961-2019.kml</code>。
-              如果本地文件尚未放入，也可以直接拖拽 KML/GeoJSON 文件导入，立即生成可交互网页。
-            </p>
-
-            <div class="hero__stats" id="heroStats">
-              <div class="stat">
-                <div class="stat__label">点位</div>
-                <div class="stat__value" id="statCount">0</div>
-              </div>
-              <div class="stat">
-                <div class="stat__label">批次</div>
-                <div class="stat__value" id="statBatches">0</div>
-              </div>
-              <div class="stat">
-                <div class="stat__label">省份/地区</div>
-                <div class="stat__value" id="statProvinces">0</div>
-              </div>
-              <div class="stat">
-                <div class="stat__label">当前筛选</div>
-                <div class="stat__value" id="statFiltered">0</div>
-              </div>
-            </div>
-          </section>
-
-          <aside class="hero__panel">
-            <div class="panel-card panel-card--accent">
-              <div class="panel-card__title">字段说明</div>
-              <ol class="panel-list">
-                <li><code>PackCN</code>：第几批。</li>
-                <li><code>TCN</code>：文保类别。</li>
-                <li><code>PCN</code>：所属时代。</li>
-                <li><code>PADCN / MADCN / CADCN</code>：省、市、区县。</li>
-              </ol>
-            </div>
-            <div class="panel-card">
-              <div class="panel-card__title">地图风格</div>
-              <p class="panel-text">采用深色底图 + 玉石绿强调，适合做文化遗产展示页和 GitHub Pages 静态站点。</p>
-            </div>
-            <div class="panel-card">
-              <div class="panel-card__title">图例</div>
-              <div class="legend">
-                <div class="legend__row"><span class="legend__marker legend__marker--site">址</span><span>古遗址</span></div>
-                <div class="legend__row"><span class="legend__marker legend__marker--building">建</span><span>古建筑</span></div>
-                <div class="legend__row"><span class="legend__marker legend__marker--tomb">墓</span><span>古墓葬</span></div>
-                <div class="legend__row"><span class="legend__marker legend__marker--stone">石</span><span>石窟寺及石刻</span></div>
-                <div class="legend__row"><span class="legend__marker legend__marker--modern">今</span><span>近现代重要史迹及代表性建筑</span></div>
-                <div class="legend__row"><span class="legend__gradient"></span><span>批次：早红晚蓝</span></div>
-              </div>
-            </div>
-          </aside>
-        </div>
+        <h1 class="top-brand__title">CULTURAL WHISPER</h1>
+        <span class="top-brand__count" id="topCountBadge" title="当前筛选点位数">0</span>
       </header>
 
-      <section class="toolbar card">
-        <div class="toolbar__search">
-          <label for="searchInput">搜索与显示筛选</label>
-          <input id="searchInput" type="search" placeholder="输入名称、地点、朝代、批次关键词" />
-          <div class="multi-hint">批次 / 分类 / 朝代 / 省份都支持多选（移动端可长按或逐项点选）</div>
+      <div class="map-top-right">
+        <div class="map-hint is-hidden" id="mapHint" role="status" aria-live="polite">正在尝试加载本地数据…</div>
+      </div>
+
+      <div class="map-controls" aria-label="地图控制">
+        <button id="zoomInBtn" type="button" aria-label="放大地图" title="放大">+</button>
+        <button id="zoomOutBtn" type="button" aria-label="缩小地图" title="缩小">−</button>
+        <button id="fitChinaBtn" type="button" aria-label="回到全国视野" title="回到全国视野">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />
+            <circle cx="12" cy="12" r="2.2" />
+          </svg>
+        </button>
+        <button id="legendToggleBtn" type="button" aria-label="显示或隐藏图例" title="图例" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="6.5" cy="7" r="2" />
+            <path d="M11 7h8" />
+            <rect x="4.5" y="10.5" width="4" height="4" rx="0.8" />
+            <path d="M11 12.5h8" />
+            <path d="M6.5 16l2 3.5h-4l2-3.5Z" />
+            <path d="M11 18h8" />
+          </svg>
+        </button>
+      </div>
+
+      <button id="locationBtn" class="location-fab" type="button" aria-label="开启实时定位" title="实时定位" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.5" />
+          <path d="M12 2.7v3M12 18.3v3M2.7 12h3m12.6 0h3" />
+        </svg>
+      </button>
+
+      <section id="bottom-control-dock" class="bottom-control-dock" aria-label="检索与筛选控制面板">
+        <button id="dockToggleBtn" class="dock-toggle" type="button" aria-controls="dockContent" aria-expanded="true" aria-label="收起底部控制面板" title="收起控制面板">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+          <span class="visually-hidden">收起底部控制面板</span>
+        </button>
+
+        <div id="heritageLegend" class="floating-legend" hidden>
+          <div class="floating-legend__header">
+            <span class="floating-legend__title">图例说明</span>
+            <button id="legendCloseBtn" class="mini-close-btn" type="button" aria-label="关闭图例">✕</button>
+          </div>
+          <div class="floating-legend__shapes">
+            <span class="shape-chip"><span class="shape-dot shape-dot--circle"></span>古遗址</span>
+            <span class="shape-chip"><span class="shape-dot shape-dot--square"></span>古建筑</span>
+            <span class="shape-chip"><span class="shape-dot shape-dot--diamond"></span>古墓葬</span>
+            <span class="shape-chip"><span class="shape-dot shape-dot--triangle"></span>石窟石刻</span>
+            <span class="shape-chip"><span class="shape-dot shape-dot--hexagon"></span>近现代</span>
+          </div>
+          <div class="floating-legend__gradient-row">
+            <span>第一批</span>
+            <span class="legend__gradient"></span>
+            <span>第八批</span>
+          </div>
         </div>
 
-        <div class="toolbar__selects">
-          <label>
-            <span>批次（PackCN）</span>
-            <select id="batchFilter" multiple size="6"></select>
-          </label>
-          <label>
-            <span>类别（TCN）</span>
-            <select id="typeFilter" multiple size="6"></select>
-          </label>
-          <label>
-            <span>朝代（PCN）</span>
-            <select id="eraFilter" multiple size="6"></select>
-          </label>
-          <label>
-            <span>省份/地区（PADCN）</span>
-            <select id="provinceFilter" multiple size="6"></select>
-          </label>
-        </div>
-
-        <div class="toolbar__actions">
-          <button id="resetViewBtn" class="btn btn--ghost" type="button">重置视图</button>
-          <button id="locationBtn" class="btn btn--ghost" type="button">实时定位</button>
-          <label class="btn btn--primary file-btn">
-            导入文件
-            <input id="fileInput" type="file" accept=".kml,.kmz,.geojson,.json,.xml" hidden />
-          </label>
-        </div>
-      </section>
-
-      <section class="content-grid">
-        <div class="map-wrap card">
-          <div id="map"></div>
-          <div class="map-hint" id="mapHint">正在尝试加载本地数据…</div>
-        </div>
-
-        <aside class="side card">
-          <div class="side__header">
-            <div>
-              <p class="eyebrow">列表</p>
-              <h2>检索结果</h2>
+        <div id="filterPopover" class="floating-popover" hidden role="dialog" aria-label="筛选条件">
+          <div class="floating-popover__header">
+            <span id="filterPopoverTitle" class="floating-popover__title">筛选</span>
+            <div class="floating-popover__actions">
+              <button id="filterSelectAllBtn" class="popover-action-btn" type="button">全部</button>
+              <button id="filterCloseBtn" class="mini-close-btn" type="button" aria-label="关闭筛选">✕</button>
             </div>
-            <div class="side__count" id="resultCount">0</div>
+          </div>
+          <div id="filterPopoverList" class="floating-popover__chips"></div>
+        </div>
+
+        <div id="dockContent" class="dock-content">
+          <div class="dock-search-row">
+            <div class="dock-search-box">
+              <svg class="dock-search-icon" viewBox="0 0 20 20" aria-hidden="true">
+                <circle cx="9" cy="9" r="5.5" />
+                <path d="m13.2 13.2 3.3 3.3" />
+              </svg>
+              <label for="searchInput" class="visually-hidden">搜索全国重点文物保护单位</label>
+              <input id="searchInput" type="search" placeholder="搜索名称、地点、朝代…" autocomplete="off" />
+            </div>
+            <button id="resetViewBtn" class="dock-reset-btn" type="button" title="重置筛选与视图" aria-label="重置筛选与视图">重置</button>
           </div>
 
-          <div class="distribution">
-            <div class="distribution__title">批次分布</div>
-            <div id="batchBars" class="bars"></div>
+          <div class="dock-filter-row" role="group" aria-label="快捷筛选">
+            <button class="filter-pill" type="button" data-filter="batch" aria-expanded="false">
+              <span class="filter-pill__label">批次</span>
+              <span class="filter-pill__caret" aria-hidden="true">▾</span>
+            </button>
+            <button class="filter-pill" type="button" data-filter="type" aria-expanded="false">
+              <span class="filter-pill__label">类别</span>
+              <span class="filter-pill__caret" aria-hidden="true">▾</span>
+            </button>
+            <button class="filter-pill" type="button" data-filter="era" aria-expanded="false">
+              <span class="filter-pill__label">朝代</span>
+              <span class="filter-pill__caret" aria-hidden="true">▾</span>
+            </button>
+            <button class="filter-pill" type="button" data-filter="province" aria-expanded="false">
+              <span class="filter-pill__label">省份</span>
+              <span class="filter-pill__caret" aria-hidden="true">▾</span>
+            </button>
           </div>
 
-          <div class="switch-panel">
-            <div class="distribution__title">批次颜色图例</div>
-            <div id="batchLegend" class="legend-list"></div>
+          <div class="visually-hidden" aria-hidden="true">
+            <select id="batchFilter" multiple tabindex="-1"></select>
+            <select id="typeFilter" multiple tabindex="-1"></select>
+            <select id="eraFilter" multiple tabindex="-1"></select>
+            <select id="provinceFilter" multiple tabindex="-1"></select>
           </div>
 
-          <div class="list" id="resultList"></div>
+          <details id="moreContent" class="more-content">
+            <summary class="dock-footer-row">
+              <span class="dock-footer-hint">
+                <span class="mini-gradient-dot" aria-hidden="true"></span>
+                <span id="dockSummaryText">共 0 处文保单位</span>
+              </span>
+              <span class="more-content-label">列表与详情</span>
+            </summary>
 
-          <div class="detail" id="detailCard">
-            <div class="detail__empty">点击左侧结果或地图点位查看详情</div>
-          </div>
-        </aside>
+            <div class="more-content-body">
+              <div class="more-tabs" role="tablist" aria-label="面板内容切换">
+                <button class="more-tab is-active" type="button" role="tab" aria-selected="true" data-more-tab="list">
+                  <span>检索结果</span>
+                  <span class="more-tab__count" id="resultCount">0</span>
+                </button>
+                <button class="more-tab" type="button" role="tab" aria-selected="false" data-more-tab="detail">
+                  <span>点位详情</span>
+                  <span class="more-tab__dot" id="detailDot" hidden></span>
+                </button>
+                <button class="more-tab" type="button" role="tab" aria-selected="false" data-more-tab="stats">
+                  <span>统计与导入</span>
+                </button>
+              </div>
+
+              <div class="more-pane more-pane--list">
+                <div class="list" id="resultList"></div>
+              </div>
+
+              <div class="more-pane more-pane--detail">
+                <div class="detail" id="detailCard">
+                  <div class="detail__empty">点击地图点位或检索结果查看详情</div>
+                </div>
+              </div>
+
+              <div class="more-pane more-pane--stats">
+                <div class="hero__stats" id="heroStats">
+                  <div class="stat">
+                    <div class="stat__label">总点位</div>
+                    <div class="stat__value" id="statCount">0</div>
+                  </div>
+                  <div class="stat">
+                    <div class="stat__label">批次</div>
+                    <div class="stat__value" id="statBatches">0</div>
+                  </div>
+                  <div class="stat">
+                    <div class="stat__label">省份</div>
+                    <div class="stat__value" id="statProvinces">0</div>
+                  </div>
+                  <div class="stat">
+                    <div class="stat__label">当前筛选</div>
+                    <div class="stat__value" id="statFiltered">0</div>
+                  </div>
+                </div>
+
+                <div class="distribution">
+                  <div class="distribution__title">批次分布</div>
+                  <div id="batchBars" class="bars"></div>
+                </div>
+
+                <div class="switch-panel">
+                  <div class="distribution__title">批次颜色图例</div>
+                  <div id="batchLegend" class="legend-list"></div>
+                </div>
+
+                <div class="data-import-card">
+                  <div class="data-import-card__head">
+                    <div>
+                      <div class="distribution__title">数据文件</div>
+                      <p class="panel-text">默认加载 <code>./data/CulRelPro_China_1961-2019.kml</code>，支持拖拽或手动导入 KML / GeoJSON。</p>
+                    </div>
+                    <label class="btn btn--primary file-btn">
+                      导入文件
+                      <input id="fileInput" type="file" accept=".kml,.kmz,.geojson,.json,.xml" hidden />
+                    </label>
+                  </div>
+                  <p class="panel-text panel-text--footnote">
+                    底图使用高德地图，文保点位按 GCJ-02 坐标显示；字段自动识别 <code>PackCN</code>（批次）、<code>TCN</code>（类别）、<code>PCN</code>（时代）、<code>PADCN/MADCN/CADCN</code>（省市区县）。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
       </section>
-
-      <footer class="footer card">
-        <div>
-          <strong>数据口径</strong>
-          <p>页面结构已就绪，字段会自动从 KML 的 ExtendedData 中识别：名称、批次、类型、省份、城市、朝代、简介等。</p>
-        </div>
-        <div>
-          <strong>项目目录</strong>
-          <p><code>./data/CulRelPro_China_1961-2019.kml</code> 建议与网页同仓库部署，地图底图使用高德，文保点位按中国地图常用 GCJ-02 坐标显示。</p>
-        </div>
-      </footer>
     </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
